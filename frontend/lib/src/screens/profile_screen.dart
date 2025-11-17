@@ -74,12 +74,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF0A0A0A),
-              const Color(0xFF121212),
-              const Color(0xFF00D9FF).withOpacity(0.05),
+              const Color(0xFFE8EAF0),
+              const Color(0xFFF0F2F8),
             ],
           ),
         ),
@@ -91,13 +90,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     Icon(
                       Icons.error_outline,
                       size: 64,
-                      color: const Color(0xFFFF3D3D),
+                      color: const Color(0xFFE57373),
                     ),
                     const SizedBox(height: 16),
                     Text(
                       _error!,
                       style: theme.textTheme.bodyLarge?.copyWith(
-                        color: const Color(0xFFFF3D3D),
+                        color: const Color(0xFFE57373),
                       ),
                     ),
                   ],
@@ -106,12 +105,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             : _initializing
             ? Center(
                 child: CircularProgressIndicator(
-                  color: const Color(0xFF00D9FF),
+                  color: const Color(0xFF8E92AB),
                 ),
               )
             : RefreshIndicator(
                 onRefresh: _load,
-                color: const Color(0xFF00D9FF),
+                color: const Color(0xFF8E92AB),
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(24),
@@ -125,19 +124,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       // AI Message
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF121212),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF00D9FF).withOpacity(0.3),
-                          ),
+                          color: const Color(0xFFE8EAF0),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withOpacity(0.7),
+                              offset: const Offset(-4, -4),
+                              blurRadius: 12,
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              offset: const Offset(4, 4),
+                              blurRadius: 12,
+                            ),
+                          ],
                         ),
                         child: Text(
                           _aiLine.isEmpty ? _rankLine(_rank) : _aiLine,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFF00D9FF),
-                            letterSpacing: 1,
+                            color: const Color(0xFF4A4E6D),
+                            letterSpacing: 0.8,
+                            fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -172,13 +181,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       
                       // Progress to Next Rank
                       Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF121212),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: const Color(0xFF2A2A2A),
-                          ),
+                          color: const Color(0xFFE8EAF0),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withOpacity(0.7),
+                              offset: const Offset(-4, -4),
+                              blurRadius: 12,
+                            ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              offset: const Offset(4, 4),
+                              blurRadius: 12,
+                            ),
+                          ],
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,8 +204,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             Text(
                               'NEXT THRESHOLD',
                               style: theme.textTheme.labelLarge?.copyWith(
-                                color: const Color(0xFF808080),
+                                color: const Color(0xFF8E92AB),
                                 fontSize: 11,
+                                letterSpacing: 2,
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -196,27 +215,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               children: [
                                 Text(
                                   '$_points',
-                                  style: theme.textTheme.titleMedium,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: const Color(0xFF4A4E6D),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 Text(
                                   '$_nextThreshold',
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    color: const Color(0xFF00D9FF),
+                                    color: const Color(0xFF8E92AB),
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 12),
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: _nextThreshold > 0
-                                    ? (_points / _nextThreshold).clamp(0.0, 1.0)
-                                    : 0.0,
-                                minHeight: 8,
-                                backgroundColor: const Color(0xFF2A2A2A),
-                                valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Color(0xFF00D9FF),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8EAF0),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      offset: const Offset(2, 2),
+                                      blurRadius: 4,
+                                      spreadRadius: 0,
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.white.withOpacity(0.5),
+                                      offset: const Offset(-2, -2),
+                                      blurRadius: 4,
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
+                                ),
+                                child: LinearProgressIndicator(
+                                  value: _nextThreshold > 0
+                                      ? (_points / _nextThreshold).clamp(0.0, 1.0)
+                                      : 0.0,
+                                  minHeight: 10,
+                                  backgroundColor: Colors.transparent,
+                                  valueColor: const AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF6B7FD7),
+                                  ),
                                 ),
                               ),
                             ),
@@ -231,6 +275,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         'TASK HISTORY',
                         style: theme.textTheme.titleMedium?.copyWith(
                           letterSpacing: 2,
+                          color: const Color(0xFF4A4E6D),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -242,7 +288,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             child: Text(
                               '履歴なし',
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: const Color(0xFF4A4A4A),
+                                color: const Color(0xFF8E92AB),
                               ),
                             ),
                           ),
@@ -251,38 +297,50 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ..._recent.map((task) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: Container(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(18),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF121212),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: _getStatusColor(task.status).withOpacity(0.3),
-                                  ),
+                                  color: const Color(0xFFE8EAF0),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.white.withOpacity(0.5),
+                                      offset: const Offset(-3, -3),
+                                      blurRadius: 8,
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      offset: const Offset(3, 3),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
                                 ),
                                 child: Row(
                                   children: [
                                     Container(
-                                      width: 8,
-                                      height: 8,
+                                      width: 10,
+                                      height: 10,
                                       decoration: BoxDecoration(
                                         color: _getStatusColor(task.status),
                                         shape: BoxShape.circle,
                                       ),
                                     ),
-                                    const SizedBox(width: 12),
+                                    const SizedBox(width: 14),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             task.title,
-                                            style: theme.textTheme.bodyLarge,
+                                            style: theme.textTheme.bodyLarge?.copyWith(
+                                              color: const Color(0xFF4A4E6D),
+                                              fontWeight: FontWeight.w500,
+                                            ),
                                           ),
                                           const SizedBox(height: 4),
                                           Text(
                                             '${task.status} · ${(task.estimateMinutes / 60).toStringAsFixed(1)}時間',
                                             style: theme.textTheme.bodySmall?.copyWith(
-                                              color: const Color(0xFF808080),
+                                              color: const Color(0xFF8E92AB),
                                             ),
                                           ),
                                         ],
@@ -290,7 +348,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     ),
                                     Icon(
                                       _getStatusIcon(task.status),
-                                      size: 20,
+                                      size: 22,
                                       color: _getStatusColor(task.status),
                                     ),
                                   ],
@@ -306,22 +364,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
   
   Color _getRankColor(int rank) {
-    if (rank >= 6) return const Color(0xFF00FF88); // Green
-    if (rank >= 4) return const Color(0xFF00D9FF); // Cyan
-    if (rank >= 2) return const Color(0xFFFFAA00); // Orange
-    return const Color(0xFFFF3D3D); // Red
+    if (rank >= 6) return const Color(0xFF4CAF50); // Green
+    if (rank >= 4) return const Color(0xFF6B7FD7); // Blue-purple
+    if (rank >= 2) return const Color(0xFFFFA726); // Orange
+    return const Color(0xFFE57373); // Red
   }
   
   Color _getStatusColor(String status) {
     switch (status) {
       case 'COMPLETED':
-        return const Color(0xFF00FF88);
+        return const Color(0xFF4CAF50);
       case 'FAILED':
-        return const Color(0xFFFF3D3D);
+        return const Color(0xFFE57373);
       case 'ACTIVE':
-        return const Color(0xFF00D9FF);
+        return const Color(0xFF6B7FD7);
       default:
-        return const Color(0xFF808080);
+        return const Color(0xFF8E92AB);
     }
   }
   
@@ -378,36 +436,42 @@ class _StatCard extends StatelessWidget {
     final theme = Theme.of(context);
     
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF121212),
-            const Color(0xFF1A1A1A),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: color.withOpacity(0.3),
-        ),
+        color: const Color(0xFFE8EAF0),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.7),
+            offset: const Offset(-6, -6),
+            blurRadius: 12,
+          ),
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            offset: const Offset(6, 6),
+            blurRadius: 12,
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Icon(icon, size: 32, color: color),
-          const SizedBox(height: 12),
+          Icon(icon, size: 36, color: const Color(0xFF8E92AB)),
+          const SizedBox(height: 14),
           Text(
             value,
             style: theme.textTheme.displayMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w300,
+              color: const Color(0xFF4A4E6D),
+              fontWeight: FontWeight.w600,
+              fontSize: 32,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             label,
             style: theme.textTheme.labelLarge?.copyWith(
-              color: const Color(0xFF808080),
+              color: const Color(0xFF8E92AB),
               fontSize: 11,
+              letterSpacing: 2,
             ),
           ),
         ],

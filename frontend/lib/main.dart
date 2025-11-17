@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'src/screens/contract_screen.dart';
 import 'src/screens/home_screen.dart';
 import 'src/screens/profile_screen.dart';
@@ -37,143 +38,140 @@ class ObeyApp extends ConsumerWidget {
     );
 
     final theme = ThemeData(
-      useMaterial3: true,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: const Color(0xFFFFFFFF), // 純白
+      scaffoldBackgroundColor: const Color(0xFFE8EAF0),
+      fontFamily: GoogleFonts.poppins().fontFamily,
       colorScheme: const ColorScheme.light(
-        primary: Color(0xFF000000), // 純黒
-        secondary: Color(0xFFEEEEEE), // 極薄グレー
-        surface: Color(0xFFFFFFFF),
-        surfaceContainerHighest: Color(0xFFFAFAFA),
-        error: Color(0xFF000000),
+        primary: Color(0xFF6B7FD7), // Soft blue-purple
+        secondary: Color(0xFFA8B4E5),
+        surface: Color(0xFFE8EAF0),
+        surfaceContainerHighest: Color(0xFFD8DAE5),
+        error: Color(0xFFE57373),
         onPrimary: Colors.white,
-        onSurface: Color(0xFF000000),
-        onSurfaceVariant: Color(0xFF888888),
+        onSurface: Color(0xFF2D3142),
+        onSurfaceVariant: Color(0xFF8E92AB),
       ),
       textTheme: const TextTheme(
         displayLarge: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 56,
-          fontWeight: FontWeight.w200,
-          letterSpacing: -2,
-          height: 1.0,
+          color: Color(0xFF2D3142),
+          fontSize: 32,
+          fontWeight: FontWeight.w300,
+          letterSpacing: -0.5,
+          height: 1.2,
         ),
         displayMedium: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 36,
-          fontWeight: FontWeight.w200,
-          letterSpacing: -1,
-          height: 1.1,
-        ),
-        titleLarge: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 18,
+          color: Color(0xFF2D3142),
+          fontSize: 24,
           fontWeight: FontWeight.w400,
           letterSpacing: 0,
+          height: 1.3,
+        ),
+        titleLarge: TextStyle(
+          color: Color(0xFF2D3142),
+          fontSize: 20,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.15,
           height: 1.4,
         ),
         titleMedium: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 14,
+          color: Color(0xFF4A4E6D),
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.15,
+          height: 1.4,
+        ),
+        bodyLarge: TextStyle(
+          color: Color(0xFF4A4E6D),
+          fontSize: 16,
           fontWeight: FontWeight.w400,
           letterSpacing: 0.5,
           height: 1.5,
         ),
-        bodyLarge: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 15,
-          fontWeight: FontWeight.w300,
-          letterSpacing: 0,
-          height: 1.6,
-        ),
         bodyMedium: TextStyle(
-          color: Color(0xFF666666),
-          fontSize: 13,
-          fontWeight: FontWeight.w300,
-          letterSpacing: 0,
+          color: Color(0xFF8E92AB),
+          fontSize: 14,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.25,
           height: 1.5,
         ),
         labelLarge: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 2,
+          color: Color(0xFF4A4E6D),
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 1.25,
         ),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFFFFFFF),
-        foregroundColor: Color(0xFF000000),
+        backgroundColor: Color(0xFFE8EAF0),
+        foregroundColor: Color(0xFF2D3142),
         elevation: 0,
-        centerTitle: false,
+        centerTitle: true,
         titleTextStyle: TextStyle(
-          color: Color(0xFF000000),
-          fontSize: 11,
+          color: Color(0xFF2D3142),
+          fontSize: 18,
           fontWeight: FontWeight.w400,
-          letterSpacing: 3,
+          letterSpacing: 2,
         ),
       ),
-      cardTheme: const CardThemeData(
-        color: Color(0xFFFFFFFF),
+      cardTheme: CardThemeData(
+        color: const Color(0xFFE8EAF0),
         elevation: 0,
         shadowColor: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(
-            color: Color(0xFFDDDDDD),
-            width: 1,
-          ),
+          borderRadius: BorderRadius.circular(16),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF000000),
-          foregroundColor: const Color(0xFFFFFFFF),
+          backgroundColor: const Color(0xFFE8EAF0),
+          foregroundColor: const Color(0xFF6B7FD7),
           elevation: 0,
           shadowColor: Colors.transparent,
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 2,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.5,
           ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF000000),
-          side: const BorderSide(color: Color(0xFF000000), width: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 20),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
+          foregroundColor: const Color(0xFF6B7FD7),
+          side: BorderSide.none,
+          backgroundColor: const Color(0xFFE8EAF0),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 2,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 1.25,
           ),
         ),
       ),
-      inputDecorationTheme: const InputDecorationTheme(
+      inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Color(0xFFFAFAFA),
+        fillColor: const Color(0xFFE8EAF0),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Color(0xFFDDDDDD)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Color(0xFF000000), width: 2),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF6B7FD7), width: 2),
         ),
-        contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
-      dividerColor: const Color(0xFFEEEEEE),
+      dividerColor: const Color(0xFFD8DAE5),
     );
 
     return MaterialApp.router(

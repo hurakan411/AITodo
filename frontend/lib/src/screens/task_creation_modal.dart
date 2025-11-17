@@ -58,11 +58,11 @@ class _TaskCreationModalState extends ConsumerState<TaskCreationModal> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF121212),
-              const Color(0xFF0A0A0A),
+              const Color(0xFFE8EAF0),
+              const Color(0xFFF0F2F8),
             ],
           ),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
@@ -78,19 +78,18 @@ class _TaskCreationModalState extends ConsumerState<TaskCreationModal> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00D9FF).withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFF00D9FF).withOpacity(0.5),
-                      ),
+                      color: const Color(0xFF8E92AB).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       'NEW TASK',
                       style: theme.textTheme.labelLarge?.copyWith(
-                        color: const Color(0xFF00D9FF),
-                        fontSize: 11,
+                        color: const Color(0xFF8E92AB),
+                        fontSize: 12,
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -98,7 +97,7 @@ class _TaskCreationModalState extends ConsumerState<TaskCreationModal> {
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(Icons.close),
-                    color: const Color(0xFF808080),
+                    color: const Color(0xFF8E92AB),
                   ),
                 ],
               ),
@@ -110,30 +109,32 @@ class _TaskCreationModalState extends ConsumerState<TaskCreationModal> {
                 controller: _controller,
                 maxLines: 4,
                 autofocus: true,
-                style: theme.textTheme.bodyLarge,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: const Color(0xFF4A4E6D),
+                ),
                 decoration: InputDecoration(
                   hintText: '例: 美容室を予約する',
                   hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFF4A4A4A),
+                    color: const Color(0xFFD8DAE5),
                   ),
                   filled: true,
-                  fillColor: const Color(0xFF1A1A1A),
+                  fillColor: const Color(0xFFE8EAF0),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     borderSide: const BorderSide(
-                      color: Color(0xFF00D9FF),
+                      color: Color(0xFF8E92AB),
                       width: 2,
                     ),
                   ),
-                  contentPadding: const EdgeInsets.all(16),
+                  contentPadding: const EdgeInsets.all(18),
                 ),
               ),
               
@@ -142,21 +143,48 @@ class _TaskCreationModalState extends ConsumerState<TaskCreationModal> {
               // Submit Button
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _loading ? null : _submit,
-                  icon: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : const Icon(Icons.auto_awesome),
-                  label: Text(_loading ? '分析中...' : 'AIに見積依頼'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8E92AB),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.8),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton.icon(
+                    onPressed: _loading ? null : _submit,
+                    icon: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.auto_awesome, color: Colors.white),
+                    label: Text(
+                      _loading ? '分析中...' : 'AIにタスクを報告する',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                    ),
                   ),
                 ),
               ),
@@ -164,27 +192,25 @@ class _TaskCreationModalState extends ConsumerState<TaskCreationModal> {
               if (_error != null) ...[
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF3D3D).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFFFF3D3D).withOpacity(0.3),
-                    ),
+                    color: const Color(0xFFE57373).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.error_outline,
-                        size: 16,
-                        color: const Color(0xFFFF3D3D),
+                        size: 18,
+                        color: const Color(0xFFE57373),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           _error!,
                           style: theme.textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFFF3D3D),
+                            color: const Color(0xFFE57373),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),

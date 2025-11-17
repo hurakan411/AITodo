@@ -35,17 +35,25 @@ create table if not exists task_logs (
   created_at timestamptz not null default now()
 );
 
--- Simple function to ensure only one ACTIVE task per user (declarative constraint alternative)
-create or replace function enforce_single_active_task() returns trigger as $$
+-- Simple function to ensure maximum 3 ACTIVE tasks per user
+create or replace function enforce_max_active_tasks() returns trigger as $$
+declare
+  active_count int;
 begin
   if (new.status = 'ACTIVE') then
-    if exists (select 1 from tasks where user_id = new.user_id and status = 'ACTIVE' and id <> new.id) then
-      raise exception 'User already has an active task';
+    select count(*) into active_count 
+    from tasks 
+    where user_id = new.user_id 
+      and status = 'ACTIVE' 
+      and id <> new.id;
+    
+    if active_count >= 3 then
+      raise exception 'User already has 3 active tasks';
     end if;
   end if;
   return new;
 end;$$ language plpgsql;
 
-create trigger trg_single_active_task
+create trigger trg_max_active_tasks
   before insert or update on tasks
-  for each row execute procedure enforce_single_active_task();
+  for each row execute procedure enforce_max_active_tasks();

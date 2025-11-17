@@ -28,25 +28,33 @@ class ApiClient {
     return Task.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<Task> extend(int extraMinutes) async {
-    final res = await _dio.post('/tasks/extend', data: {'extra_minutes': extraMinutes});
+  Future<Task> extend(String taskId, int extraMinutes) async {
+    final res = await _dio.post('/tasks/extend', data: {
+      'task_id': taskId,
+      'extra_minutes': extraMinutes
+    });
     return Task.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<Task> complete(String selfReport) async {
-    final res = await _dio.post('/tasks/complete', data: {'self_report': selfReport});
+  Future<Task> complete(String taskId, String selfReport) async {
+    final res = await _dio.post('/tasks/complete', data: {
+      'task_id': taskId,
+      'self_report': selfReport
+    });
     return Task.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<Task> withdraw() async {
-    final res = await _dio.post('/tasks/withdraw');
+  Future<Task> withdraw(String taskId) async {
+    final res = await _dio.post('/tasks/withdraw', data: {'task_id': taskId});
     return Task.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<Task?> currentTask() async {
+  Future<List<Task>> currentTasks() async {
     final res = await _dio.get('/tasks/current');
-    if (res.data == null) return null;
-    return Task.fromJson(res.data as Map<String, dynamic>);
+    if (res.data == null || res.data is! List) return [];
+    return (res.data as List<dynamic>)
+        .map((e) => Task.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<StatusPayload> status() async {
@@ -61,7 +69,7 @@ class ApiClient {
 
 class StatusPayload {
   final Profile profile;
-  final Task? currentTask;
+  final List<Task> activeTasks;
   final List<Task> recentTasks;
   final int nextThreshold;
   final String aiLine;
@@ -69,7 +77,7 @@ class StatusPayload {
 
   StatusPayload({
     required this.profile,
-    required this.currentTask,
+    required this.activeTasks,
     required this.recentTasks,
     required this.nextThreshold,
     required this.aiLine,
@@ -78,9 +86,9 @@ class StatusPayload {
 
   factory StatusPayload.fromJson(Map<String, dynamic> json) => StatusPayload(
         profile: Profile.fromJson(json['profile'] as Map<String, dynamic>),
-        currentTask: json['current_task'] == null
-            ? null
-            : Task.fromJson(json['current_task'] as Map<String, dynamic>),
+        activeTasks: (json['active_tasks'] as List<dynamic>? ?? [])
+            .map((e) => Task.fromJson(e as Map<String, dynamic>))
+            .toList(),
         recentTasks: (json['recent_tasks'] as List<dynamic>)
             .map((e) => Task.fromJson(e as Map<String, dynamic>))
             .toList(),

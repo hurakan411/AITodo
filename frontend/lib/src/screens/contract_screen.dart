@@ -12,9 +12,9 @@ class ContractScreen extends ConsumerStatefulWidget {
 
 class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProviderStateMixin {
   final List<String> _questions = const [
-    'あなたはAIの命令に従うことに同意しますか？',
-    '期限を守れない場合は減点されることを理解しましたか？',
-    '達成時には簡易レポートを提出しますか？',
+    'あなたは、タスクを後回しにしてしまうことを認めますか？',
+    'あなたは、タスクを完了するために私の力が必要なことを認めますか？',
+    'あなたは、"必ず"私の支持するままにタスクを進めることに同意しますか？',
   ];
 
   late List<bool?> _answers;
@@ -181,45 +181,49 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
                               children: [
                                 // YESボタン
                                 SizedBox(
-                                  width: 120,
+                                  width: 130,
                                   child: OutlinedButton(
                                     onPressed: _isTransitioning ? null : () => _answerQuestion(true),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      side: const BorderSide(color: Colors.white, width: 1),
+                                      padding: const EdgeInsets.symmetric(vertical: 18),
+                                      side: const BorderSide(color: Colors.white, width: 1.5),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(0),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
+                                      backgroundColor: Colors.white.withOpacity(0.05),
                                     ),
                                     child: const Text(
                                       'YES',
                                       style: TextStyle(
                                         color: Colors.white,
-                                        letterSpacing: 3,
-                                        fontSize: 14,
+                                        letterSpacing: 4,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 40),
+                                const SizedBox(width: 32),
                                 // NOボタン
                                 SizedBox(
-                                  width: 120,
+                                  width: 130,
                                   child: OutlinedButton(
                                     onPressed: _isTransitioning ? null : () => _answerQuestion(false),
                                     style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      side: const BorderSide(color: Colors.white, width: 1),
+                                      padding: const EdgeInsets.symmetric(vertical: 18),
+                                      side: BorderSide(color: Colors.white.withOpacity(0.5), width: 1.5),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(0),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
+                                      backgroundColor: Colors.transparent,
                                     ),
-                                    child: const Text(
+                                    child: Text(
                                       'NO',
                                       style: TextStyle(
-                                        color: Colors.white,
-                                        letterSpacing: 3,
-                                        fontSize: 14,
+                                        color: Colors.white.withOpacity(0.5),
+                                        letterSpacing: 4,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ),

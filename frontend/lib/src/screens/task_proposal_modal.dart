@@ -15,7 +15,6 @@ class TaskProposalModal extends ConsumerStatefulWidget {
 
 class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
   bool _loading = false;
-  int _extendMinutes = 180;  // 3時間をデフォルトに
   String? _error;
 
   Future<void> _accept({bool andExtend = false}) async {
@@ -26,9 +25,6 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
     try {
       final api = ref.read(apiClientProvider);
       await api.accept(widget.proposal);
-      if (andExtend) {
-        await api.extend(_extendMinutes);
-      }
       if (!mounted) return;
       
       // Close this proposal modal
@@ -53,6 +49,9 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
     final theme = Theme.of(context);
     final p = widget.proposal;
     
+    // UTC時刻をJST(+8時間)に変換
+    final deadlineJst = p.deadlineAt.add(const Duration(hours: 8));
+    
     // ポイント計算: 見積もり時間から算出
     final estimatedHours = p.estimateMinutes / 60;
     final basePoints = min(5, max(1, (estimatedHours / 6).floor()));
@@ -68,11 +67,11 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF121212),
-              const Color(0xFF0A0A0A),
+              const Color(0xFFE8EAF0),
+              const Color(0xFFF0F2F8),
             ],
           ),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
@@ -90,19 +89,18 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00D9FF).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                          color: const Color(0xFF00D9FF).withOpacity(0.5),
-                        ),
+                        color: const Color(0xFF8E92AB).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'AI PROPOSAL',
                         style: theme.textTheme.labelLarge?.copyWith(
-                          color: const Color(0xFF00D9FF),
-                          fontSize: 11,
+                          color: const Color(0xFF8E92AB),
+                          fontSize: 12,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -110,7 +108,7 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.close),
-                      color: const Color(0xFF808080),
+                      color: const Color(0xFF8E92AB),
                     ),
                   ],
                 ),
@@ -119,34 +117,62 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                 
                 // AI Comment
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF00D9FF).withOpacity(0.1),
-                        const Color(0xFF00D9FF).withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF00D9FF).withOpacity(0.3),
-                    ),
+                    color: const Color(0xFFE8EAF0),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.psychology_outlined,
-                        color: const Color(0xFF00D9FF),
-                        size: 20,
+                        color: const Color(0xFF8E92AB),
+                        size: 22,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Text(
                           aiComment,
                           style: theme.textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFF00D9FF),
-                            height: 1.4,
+                            color: const Color(0xFF4A4E6D),
+                            fontWeight: FontWeight.w500,
                           ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Task Name - 目立つように
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8EAF0),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TASK',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: const Color(0xFF4A4E6D),
+                          fontSize: 11,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        p.title,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontSize: 22,
+                          color: const Color(0xFF8E92AB),
+                          fontWeight: FontWeight.w700,
+                          height: 1.4,
                         ),
                       ),
                     ],
@@ -157,32 +183,30 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                 
                 // Expected Points
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF2A2A2A),
-                    ),
+                    color: const Color(0xFFE8EAF0),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.star_border_rounded,
-                        color: const Color(0xFFFFD700),
-                        size: 20,
+                        color: const Color(0xFF8E92AB),
+                        size: 22,
                       ),
                       const SizedBox(width: 12),
                       Text(
                         '達成時の基本報酬: ',
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFF808080),
+                          color: const Color(0xFF4A4E6D),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
                         '+$basePoints pts',
                         style: theme.textTheme.titleMedium?.copyWith(
-                          color: const Color(0xFFFFD700),
+                          color: const Color(0xFF8E92AB),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -190,7 +214,7 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                       Text(
                         '+ 時間ボーナス',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFF808080),
+                          color: const Color(0xFF8E92AB),
                           fontSize: 11,
                         ),
                       ),
@@ -200,36 +224,16 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                 
                 const SizedBox(height: 24),
                 
-                // Task Details Card
+                // Task Details Card (ESTIMATE & DEADLINE)
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF2A2A2A),
-                    ),
+                    color: const Color(0xFFE8EAF0),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'TASK',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: const Color(0xFF808080),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        p.title,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontSize: 18,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(color: Color(0xFF2A2A2A)),
-                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Expanded(
@@ -239,15 +243,18 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                                 Text(
                                   'ESTIMATE',
                                   style: theme.textTheme.labelLarge?.copyWith(
-                                    color: const Color(0xFF808080),
+                                    color: const Color(0xFF4A4E6D),
                                     fontSize: 10,
+                                    letterSpacing: 1.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
                                 Text(
                                   '${(p.estimateMinutes / 60).toStringAsFixed(1)}時間',
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    color: const Color(0xFF00D9FF),
+                                    color: const Color(0xFF8E92AB),
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -260,15 +267,18 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                                 Text(
                                   'DEADLINE',
                                   style: theme.textTheme.labelLarge?.copyWith(
-                                    color: const Color(0xFF808080),
+                                    color: const Color(0xFF4A4E6D),
                                     fontSize: 10,
+                                    letterSpacing: 1.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
                                 Text(
-                                  '${p.deadlineAt.hour.toString().padLeft(2, '0')}:${p.deadlineAt.minute.toString().padLeft(2, '0')}',
+                                  '${deadlineJst.hour.toString().padLeft(2, '0')}:${deadlineJst.minute.toString().padLeft(2, '0')}',
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    color: const Color(0xFF00D9FF),
+                                    color: const Color(0xFF8E92AB),
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -282,117 +292,48 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                 
                 const SizedBox(height: 24),
                 
-                // Extension Options
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A).withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF4A4A4A).withOpacity(0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 16,
-                        color: const Color(0xFF808080),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '延長オプション: ',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF808080),
-                          ),
-                        ),
-                      ),
-                      DropdownButton<int>(
-                        value: _extendMinutes,
-                        onChanged: _loading ? null : (v) => setState(() => _extendMinutes = v ?? 180),
-                        dropdownColor: const Color(0xFF1A1A1A),
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: const Color(0xFF00D9FF),
-                        ),
-                        underline: Container(),
-                        items: const [180, 240, 360, 480, 720]
-                            .map((m) => DropdownMenuItem(
-                                  value: m,
-                                  child: Text('+${(m / 60).toStringAsFixed(1)}時間'),
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 24),
-                
                 // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _loading ? null : () => _accept(andExtend: false),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        child: _loading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('承認'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _loading ? null : () => _accept(andExtend: true),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                        ),
-                        child: _loading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                ),
-                              )
-                            : const Text('延長して承認'),
-                      ),
-                    ),
-                  ],
+                SizedBox(
+                  width: double.infinity,
+                  child: _NeumorphicButton(
+                    onPressed: _loading ? null : () => _accept(andExtend: false),
+                    backgroundColor: const Color(0xFF8E92AB),
+                    textColor: Colors.white,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Text('承認'),
+                  ),
                 ),
                 
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF3D3D).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFFFF3D3D).withOpacity(0.3),
-                      ),
+                      color: const Color(0xFFE57373).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           Icons.error_outline,
-                          size: 16,
-                          color: const Color(0xFFFF3D3D),
+                          size: 18,
+                          color: const Color(0xFFE57373),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             _error!,
                             style: theme.textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFFFF3D3D),
+                              color: const Color(0xFFE57373),
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
@@ -402,6 +343,60 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                 ],
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NeumorphicButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final Widget child;
+  final Color backgroundColor;
+  final Color textColor;
+
+  const _NeumorphicButton({
+    required this.onPressed,
+    required this.child,
+    this.backgroundColor = const Color(0xFF8E92AB),
+    this.textColor = Colors.white,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: onPressed == null
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.12),
+                      offset: const Offset(4, 4),
+                      blurRadius: 10,
+                    ),
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.5),
+                      offset: const Offset(-4, -4),
+                      blurRadius: 10,
+                    ),
+                  ],
+          ),
+          child: DefaultTextStyle(
+            style: TextStyle(
+              color: textColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+            child: Center(child: child),
           ),
         ),
       ),

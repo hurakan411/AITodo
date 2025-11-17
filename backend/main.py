@@ -65,6 +65,7 @@ class Task(BaseModel):
 
 
 class CompleteRequest(BaseModel):
+    task_id: str
     self_report: str = Field(min_length=3)
     completed_at: Optional[datetime] = None
 
@@ -74,7 +75,12 @@ class ProposeRequest(BaseModel):
 
 
 class ExtendRequest(BaseModel):
+    task_id: str
     extra_minutes: int = Field(ge=5, le=24*60)
+
+
+class WithdrawRequest(BaseModel):
+    task_id: str
 
 
 class Profile(BaseModel):
@@ -85,7 +91,7 @@ class Profile(BaseModel):
 
 class StatusResponse(BaseModel):
     profile: Profile
-    current_task: Optional[Task] = None
+    active_tasks: List[Task] = []
     recent_tasks: List[Task] = []
     next_threshold: int = 10
     ai_line: str
@@ -96,7 +102,7 @@ class StatusResponse(BaseModel):
 class Repo:
     def get_profile(self) -> Profile: ...
     def set_profile(self, p: Profile) -> None: ...
-    def get_active(self) -> Optional[Task]: ...
+    def get_active_tasks(self) -> List[Task]: ...
     def add_task(self, task: Task) -> Task: ...
     def update_task(self, task: Task) -> Task: ...
     def recent(self) -> List[Task]: ...
@@ -123,11 +129,8 @@ class MemoryRepo(Repo):
         self.tasks[task.id] = task
         return task
 
-    def get_active(self) -> Optional[Task]:
-        for t in self.tasks.values():
-            if t.status == TaskStatus.ACTIVE:
-                return t
-        return None
+    def get_active_tasks(self) -> List[Task]:
+        return [t for t in self.tasks.values() if t.status == TaskStatus.ACTIVE]
 
     def recent(self) -> List[Task]:
         return sorted(self.tasks.values(), key=lambda x: x.created_at, reverse=True)[:10]
@@ -214,13 +217,10 @@ class SupabaseRepo(Repo):
         updated = self.client.table('tasks').select('*').eq('id', task.id).single().execute()
         return self._row_to_task(updated.data)
 
-    def get_active(self) -> Optional[Task]:
+    def get_active_tasks(self) -> List[Task]:
         uid = self._ensure_user()
-        res = self.client.table('tasks').select('*').eq('user_id', uid).eq('status', TaskStatus.ACTIVE).limit(1).execute()
-        rows = res.data or []
-        if not rows:
-            return None
-        return self._row_to_task(rows[0])
+        res = self.client.table('tasks').select('*').eq('user_id', uid).eq('status', TaskStatus.ACTIVE).execute()
+        return [self._row_to_task(r) for r in (res.data or [])]
 
     def recent(self) -> List[Task]:
         uid = self._ensure_user()
@@ -406,7 +406,7 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         persona = AI_PERSONAS.get(rank, AI_PERSONAS[1])
         
         # AIコメントを生成（ランク別の性格を反映、タスク内容に言及）
-        comment_prompt = f"""以下のタスクについて、AIアシスタントとして短い一言コメントを作成してください。
+        comment_prompt = f"""以下のタスクについて、AIアシスタントとして短いコメントを作成してください。
 
 タスク: {text}
 見積もり工数: {estimate_hours}時間
@@ -416,26 +416,26 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
 {persona['prompt']}
 
 重要:
-- 必ずタスクの内容に言及してください
-- タスク名や作業内容を具体的に含めてください
+- 必ずタスクの内容に具体的に言及してください
+- タスクに対する見解や、作業のポイント、注意点などを含めてください
 - 上記のキャラクター設定に基づいた口調で話してください
-- 20文字以内の簡潔な日本語
+- 30〜50文字程度の日本語
 
 ランク別コメント例:
-Rank 1 (Protocol): 「レポート作成」→ "...レポート。実行。"
-Rank 2 (Executor): 「買い物」→ "買い物、完了させろ。"
-Rank 3 (Analyst): 「メール返信」→ "メール返信、問題なし。"
-Rank 4 (Monitor): 「システム設計」→ "設計、慎重にな。"
-Rank 5 (Advisor): 「会議準備」→ "会議準備、よくできています。"
-Rank 6 (Guardian): 「資料作成」→ "資料作成、丁寧に進めましょう。"
-Rank 7 (Partner): 「企画書」→ "企画書、楽しみにしていますよ。"
+Rank 1 (Protocol): 「レポート作成」→ "...レポート作成。データ収集と分析が必要だ。実行せよ。"
+Rank 2 (Executor): 「買い物」→ "買い物リストを確認し、必要な物品を漏れなく購入しなさい。"
+Rank 3 (Analyst): 「メール返信」→ "メール返信は優先度を判断し、論理的に整理して対応してください。"
+Rank 4 (Monitor): 「システム設計」→ "システム設計は要件を精査し、段階的に進めることを推奨します。"
+Rank 5 (Advisor): 「会議準備」→ "会議準備は資料の論点を明確にし、参加者への配慮も忘れずに。"
+Rank 6 (Guardian): 「資料作成」→ "資料作成は丁寧に進めましょう。必要であれば休憩も取ってください。"
+Rank 7 (Partner): 「企画書」→ "企画書作成ですね。あなたのアイデアを存分に活かしてください。"
 
-タスク内容に言及し、キャラクターに合った口調で、前向きで適切なコメントを生成してください。"""
+タスクの具体的な作業内容や進め方に触れながら、キャラクターに合った口調でコメントを生成してください。"""
 
         comment_response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": f"{persona['prompt']} 必ずタスクの具体的な内容に言及し、簡潔なコメントを提供してください。"},
+                {"role": "system", "content": f"{persona['prompt']} タスクの具体的な内容と作業のポイントに言及した、やや詳しめのコメントを提供してください。"},
                 {"role": "user", "content": comment_prompt}
             ],
         )
@@ -510,8 +510,9 @@ async def propose(req: ProposeRequest):
 
 @app.post('/tasks/accept', response_model=Task)
 async def accept(proposal: TaskProposal):
-    if repo.get_active() is not None:
-        raise HTTPException(400, 'Active task already exists')
+    active_tasks = repo.get_active_tasks()
+    if len(active_tasks) >= 3:
+        raise HTTPException(400, '既に3つのタスクが進行中です')
     # id is assigned by repo (Supabase) when needed; memory uses provided
     task = Task(
         id=f"task_{int(datetime.now().timestamp())}",
@@ -523,15 +524,24 @@ async def accept(proposal: TaskProposal):
         extension_used=False,
         weight=proposal.weight,
     )
-    created = repo.add_task(task)
-    return created
+    try:
+        created = repo.add_task(task)
+        return created
+    except Exception as e:
+        # Supabaseのトリガーエラーをキャッチ
+        error_msg = str(e)
+        if 'already has an active task' in error_msg or 'already has 3 active tasks' in error_msg:
+            raise HTTPException(400, '既に3つのタスクが進行中です。データベーストリガーを更新してください。')
+        raise
 
 
 @app.post('/tasks/extend', response_model=Task)
 async def extend(req: ExtendRequest):
-    task = repo.get_active()
+    # Find the specific task by ID
+    active_tasks = repo.get_active_tasks()
+    task = next((t for t in active_tasks if t.id == req.task_id), None)
     if not task:
-        raise HTTPException(404, 'No active task')
+        raise HTTPException(404, '指定されたタスクが見つかりません')
     if task.extension_used:
         raise HTTPException(400, 'Extension already used')
     task.deadline_at = task.deadline_at + timedelta(minutes=req.extra_minutes)
@@ -542,9 +552,11 @@ async def extend(req: ExtendRequest):
 
 @app.post('/tasks/complete', response_model=Task)
 async def complete(req: CompleteRequest):
-    task = repo.get_active()
+    # Find the specific task by ID
+    active_tasks = repo.get_active_tasks()
+    task = next((t for t in active_tasks if t.id == req.task_id), None)
     if not task:
-        raise HTTPException(404, 'No active task')
+        raise HTTPException(404, '指定されたタスクが見つかりません')
 
     now = req.completed_at or datetime.now(timezone.utc)
 
@@ -570,11 +582,13 @@ async def complete(req: CompleteRequest):
 
 
 @app.post('/tasks/withdraw', response_model=Task)
-async def withdraw():
+async def withdraw(req: WithdrawRequest):
     """進行中のタスクを取り下げ（ペナルティあり）"""
-    task = repo.get_active()
+    # Find the specific task by ID
+    active_tasks = repo.get_active_tasks()
+    task = next((t for t in active_tasks if t.id == req.task_id), None)
     if not task:
-        raise HTTPException(404, 'No active task')
+        raise HTTPException(404, '指定されたタスクが見つかりません')
     
     # タスクを失敗扱いにしてペナルティを適用
     task.status = TaskStatus.FAILED
@@ -584,18 +598,18 @@ async def withdraw():
     return updated
 
 
-@app.get('/tasks/current', response_model=Optional[Task])
+@app.get('/tasks/current', response_model=List[Task])
 async def current_task():
     # mark overdue as failed if necessary
-    task = repo.get_active()
-    if task:
-        now = datetime.now(timezone.utc)
+    active_tasks = repo.get_active_tasks()
+    now = datetime.now(timezone.utc)
+    for task in active_tasks:
         if now > task.deadline_at:
             task.status = TaskStatus.FAILED
             repo.update_task(task)
             profile = apply_points_on_failure(repo.get_profile(), task)
             repo.set_profile(profile)
-    return repo.get_active()
+    return repo.get_active_tasks()
 
 
 @app.get('/status', response_model=StatusResponse)
@@ -615,7 +629,7 @@ async def status():
     game_over = int(prof.rank) == 1 and failed_exists
     return StatusResponse(
         profile=prof,
-        current_task=repo.get_active(),
+        active_tasks=repo.get_active_tasks(),
         recent_tasks=repo.recent(),
         next_threshold=next_th,
         ai_line=ai_line,

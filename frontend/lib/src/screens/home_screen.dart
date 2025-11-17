@@ -1,11 +1,9 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 import 'package:dio/dio.dart';
 import '../models/task.dart';
-import '../models/proposal.dart';
 import '../services/api_client.dart';
 import 'task_creation_modal.dart';
 import 'task_proposal_modal.dart';
@@ -18,15 +16,15 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  Task? _current;
+  List<Task> _activeTasks = [];
   String _aiLine = '';
-  Duration _remaining = Duration.zero;
   bool _loading = false;
   bool _initializing = true;
   String? _error;
   late final Ticker _ticker;
   int? _lastPoints;
   int _lastRank = 2;
+  bool _isButtonPressed = false; // ボタン押下状態
 
   @override
   void initState() {
@@ -37,11 +35,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   void _onTick(Duration _) {
     if (!mounted) return;
-    if (_current == null) return;
+    if (_activeTasks.isEmpty) return;
+    // Check if any task has expired
     final now = DateTime.now().toUtc();
-    final diff = _current!.deadlineAt.difference(now);
-    setState(() => _remaining = diff);
-    if (diff.isNegative) {
+    final hasExpired = _activeTasks.any((task) => 
+      task.deadlineAt.difference(now).isNegative
+    );
+    if (hasExpired) {
       // pull status to reflect failure/points
       _loadStatus();
     }
@@ -63,15 +63,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return;
       }
       setState(() {
-        _current = s.currentTask;
+        _activeTasks = s.activeTasks;
         _lastRank = s.profile.rank;
         // フロントエンドでランダムにセリフを生成
         _aiLine = _rankLine(s.profile.rank);
         // ignore: avoid_print
         print('[Home] ai_line: $_aiLine');
-        _remaining = _current == null
-            ? Duration.zero
-            : _current!.deadlineAt.difference(DateTime.now().toUtc());
         _initializing = false;
       });
       if (_lastPoints != null && s.profile.points < _lastPoints!) {
@@ -167,6 +164,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _openCreate() async {
+    // ボタンを押したらすぐに元に戻す
+    setState(() => _isButtonPressed = true);
+    await Future.delayed(const Duration(milliseconds: 100));
+    if (mounted) {
+      setState(() => _isButtonPressed = false);
+    }
+    
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -193,33 +197,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Future<void> _extend() async {
-    if (_current == null) return;
-    setState(() => _loading = true);
-    try {
-      final api = ref.read(apiClientProvider);
-      await api.extend(30);
-      await _loadStatus();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('AI: 延長を許可した。30分の猶予を与える。'),
-          backgroundColor: const Color(0xFF00D9FF),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('AI: 延長は既に使用済みだ。'),
-          backgroundColor: const Color(0xFFFF3D3D),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
   Future<void> _complete() async {
     final controller = TextEditingController();
     final theme = Theme.of(context);
@@ -227,25 +204,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: const Color(0xFFE8EAF0),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: const Color(0xFF00D9FF).withOpacity(0.3),
-          ),
+          borderRadius: BorderRadius.circular(20),
         ),
         title: Row(
           children: [
             Icon(
               Icons.check_circle_outline,
-              color: const Color(0xFF00D9FF),
+              color: const Color(0xFF8E92AB),
               size: 24,
             ),
             const SizedBox(width: 12),
             Text(
               '完了レポート',
               style: theme.textTheme.titleLarge?.copyWith(
-                color: const Color(0xFF00D9FF),
+                color: const Color(0xFF4A4E6D),
               ),
             ),
           ],
@@ -257,7 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Text(
               'やったこと・気づきを記録してください',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF808080),
+                color: const Color(0xFF8E92AB),
               ),
             ),
             const SizedBox(height: 16),
@@ -269,22 +243,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               decoration: InputDecoration(
                 hintText: '例: 基本構成を完成させた。次は詳細を詰める。',
                 hintStyle: theme.textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFF4A4A4A),
+                  color: const Color(0xFFD8DAE5),
                 ),
                 filled: true,
-                fillColor: const Color(0xFF0A0A0A),
+                fillColor: const Color(0xFFE8EAF0),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(
-                    color: Color(0xFF00D9FF),
+                    color: Color(0xFF8E92AB),
                     width: 2,
                   ),
                 ),
@@ -296,8 +270,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           OutlinedButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF808080),
-              side: const BorderSide(color: Color(0xFF4A4A4A)),
+              foregroundColor: const Color(0xFF8E92AB),
+              side: BorderSide.none,
             ),
             child: const Text('キャンセル'),
           ),
@@ -309,16 +283,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
     if (ok != true) return;
+    if (_activeTasks.isEmpty) return;
+    
     setState(() => _loading = true);
     try {
       final api = ref.read(apiClientProvider);
-      await api.complete(controller.text.trim());
+      // 最初のアクティブタスクを完了
+      await api.complete(_activeTasks.first.id, controller.text.trim());
       await _loadStatus();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('完了を記録しました'),
-          backgroundColor: const Color(0xFF00D9FF),
+          backgroundColor: const Color(0xFF8E92AB),
         ),
       );
     } on DioException catch (e) {
@@ -345,18 +322,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF121212),
+          backgroundColor: const Color(0xFFE8EAF0),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: const Color(0xFFFF3D3D).withOpacity(0.3),
-            ),
+            borderRadius: BorderRadius.circular(20),
           ),
           title: Row(
             children: [
               Icon(
                 Icons.warning_amber_rounded,
-                color: const Color(0xFFFF3D3D),
+                color: const Color(0xFFE57373),
                 size: 28,
               ),
               const SizedBox(width: 12),
@@ -364,7 +338,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: Text(
                   'AI: 却下',
                   style: theme.textTheme.titleLarge?.copyWith(
-                    color: const Color(0xFFFF3D3D),
+                    color: const Color(0xFFE57373),
                     letterSpacing: 2,
                   ),
                 ),
@@ -375,13 +349,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             errorMessage,
             style: theme.textTheme.bodyLarge?.copyWith(
               height: 1.5,
+              color: const Color(0xFF4A4E6D),
             ),
           ),
           actions: [
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF3D3D),
+                backgroundColor: const Color(0xFFE57373),
                 foregroundColor: Colors.white,
               ),
               child: const Text('了解'),
@@ -394,7 +369,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('エラー: $e'),
-          backgroundColor: const Color(0xFFFF3D3D),
+          backgroundColor: const Color(0xFFE57373),
         ),
       );
     } finally {
@@ -408,25 +383,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: const Color(0xFFE8EAF0),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: const Color(0xFFFF3D3D).withOpacity(0.5),
-          ),
+          borderRadius: BorderRadius.circular(20),
         ),
         title: Row(
           children: [
             Icon(
               Icons.cancel_outlined,
-              color: const Color(0xFFFF3D3D),
+              color: const Color(0xFFE57373),
               size: 28,
             ),
             const SizedBox(width: 12),
             Text(
               'AI: 警告',
               style: theme.textTheme.titleLarge?.copyWith(
-                color: const Color(0xFFFF3D3D),
+                color: const Color(0xFFE57373),
                 letterSpacing: 2,
               ),
             ),
@@ -441,13 +413,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 height: 1.5,
+                color: const Color(0xFF4A4E6D),
               ),
             ),
             const SizedBox(height: 12),
             Text(
               '取り下げは失敗扱いだ。\nペナルティが適用される。',
               style: theme.textTheme.bodyLarge?.copyWith(
-                color: const Color(0xFF808080),
+                color: const Color(0xFF8E92AB),
                 height: 1.5,
               ),
             ),
@@ -457,15 +430,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           OutlinedButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF00D9FF),
-              side: const BorderSide(color: Color(0xFF00D9FF)),
+              foregroundColor: const Color(0xFF8E92AB),
+              side: BorderSide.none,
             ),
             child: const Text('戻る'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF3D3D),
+              backgroundColor: const Color(0xFFE57373),
               foregroundColor: Colors.white,
             ),
             child: const Text('取り下げる'),
@@ -475,17 +448,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
     
     if (confirm != true) return;
+    if (_activeTasks.isEmpty) return;
     
     setState(() => _loading = true);
     try {
       final api = ref.read(apiClientProvider);
-      await api.withdraw();
+      // 最初のアクティブタスクを取り下げ
+      await api.withdraw(_activeTasks.first.id);
       await _loadStatus();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('AI: タスクを破棄した。減点を記録。'),
-          backgroundColor: const Color(0xFFFF3D3D),
+          backgroundColor: const Color(0xFFE57373),
         ),
       );
     } catch (e) {
@@ -493,7 +468,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('エラー: $e'),
-          backgroundColor: const Color(0xFFFF3D3D),
+          backgroundColor: const Color(0xFFE57373),
         ),
       );
     } finally {
@@ -513,7 +488,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final urgentMode = _remaining.inMinutes < 10 && _remaining.inSeconds > 0;
+    // 最初のアクティブタスクの残り時間を計算
+    final now = DateTime.now().toUtc();
+    final firstTask = _activeTasks.isNotEmpty ? _activeTasks.first : null;
+    final remaining = firstTask != null 
+        ? firstTask.deadlineAt.difference(now)
+        : Duration.zero;
+    final urgentMode = remaining.inMinutes < 10 && remaining.inSeconds > 0;
     
     return Scaffold(
       appBar: AppBar(
@@ -529,13 +510,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF0A0A0A),
+              const Color(0xFFE8EAF0),
               urgentMode
-                  ? const Color(0xFFFF3D3D).withOpacity(0.1)
-                  : const Color(0xFF00D9FF).withOpacity(0.05),
+                  ? const Color(0xFFE57373).withOpacity(0.1)
+                  : const Color(0xFFF0F2F8),
             ],
           ),
         ),
@@ -546,24 +527,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 // AI Character
                 const _LottiePlaceholder(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 
                 // AI Message
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF121212).withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFF00D9FF).withOpacity(0.3),
-                      width: 1,
-                    ),
+                    color: const Color(0xFFE8EAF0),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.7),
+                        offset: const Offset(-4, -4),
+                        blurRadius: 12,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        offset: const Offset(4, 4),
+                        blurRadius: 12,
+                      ),
+                    ],
                   ),
                   child: Text(
                     _aiLine.isEmpty ? _rankLine(_lastRank) : _aiLine,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFF00D9FF),
-                      letterSpacing: 1,
+                      color: const Color(0xFF4A4E6D),
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w500,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -573,253 +563,219 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 
                 // Task Display
                 Expanded(
-                  child: _initializing
+                  child: _initializing && _activeTasks.isNotEmpty
                       ? Center(
                           child: CircularProgressIndicator(
-                            color: const Color(0xFF00D9FF),
+                            color: const Color(0xFF8E92AB),
                           ),
                         )
-                      : _current == null
+                      : _activeTasks.isEmpty
                       ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.inbox_outlined,
-                                size: 64,
-                                color: const Color(0xFF4A4A4A),
+                          child: GestureDetector(
+                            onTap: _openCreate,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 100),
+                              width: 240,
+                              height: 240,
+                              transform: Matrix4.translationValues(
+                                0,
+                                _isButtonPressed ? 4 : 0,
+                                0,
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                '現在のタスクはありません',
-                                style: theme.textTheme.bodyLarge?.copyWith(
-                                  color: const Color(0xFF808080),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: _isButtonPressed
+                                      ? [
+                                          const Color(0xFFD0D3E0),
+                                          const Color(0xFFE0E2EC),
+                                        ]
+                                      : [
+                                          const Color(0xFFE0E2EC),
+                                          const Color(0xFFF0F2F8),
+                                        ],
                                 ),
+                                boxShadow: _isButtonPressed
+                                    ? [
+                                        // 押下時：小さな影で沈んだ印象
+                                        BoxShadow(
+                                          color: Colors.white.withOpacity(0.3),
+                                          offset: const Offset(-2, -2),
+                                          blurRadius: 8,
+                                          spreadRadius: 0,
+                                        ),
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.15),
+                                          offset: const Offset(2, 2),
+                                          blurRadius: 8,
+                                          spreadRadius: 0,
+                                        ),
+                                      ]
+                                    : [
+                                        // 通常時：大きな影で浮き上がった印象
+                                        BoxShadow(
+                                          color: Colors.white.withOpacity(0.8),
+                                          offset: const Offset(-8, -8),
+                                          blurRadius: 20,
+                                          spreadRadius: 2,
+                                        ),
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.2),
+                                          offset: const Offset(8, 8),
+                                          blurRadius: 20,
+                                          spreadRadius: 2,
+                                        ),
+                                      ],
                               ),
-                              const SizedBox(height: 32),
-                              ElevatedButton.icon(
-                                onPressed: _openCreate,
-                                icon: const Icon(Icons.add),
-                                label: const Text('新規タスクを作成'),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_circle_outline,
+                                    size: 72,
+                                    color: const Color(0xFF8E92AB),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'NEW\nTASK',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: const Color(0xFF8E92AB),
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 4,
+                                      height: 1.2,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         )
                       : SingleChildScrollView(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Task Card
-                              Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    const Color(0xFF121212),
-                                    const Color(0xFF1A1A1A),
-                                  ],
+                              // ACTIVE TASKS ヘッダー
+                              Text(
+                                'ACTIVE TASKS (${_activeTasks.length}/3)',
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: const Color(0xFF8E92AB),
+                                  fontSize: 11,
+                                  letterSpacing: 2,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: urgentMode
-                                      ? const Color(0xFFFF3D3D).withOpacity(0.5)
-                                      : const Color(0xFF00D9FF).withOpacity(0.3),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: urgentMode
-                                        ? const Color(0xFFFF3D3D).withOpacity(0.2)
-                                        : const Color(0xFF00D9FF).withOpacity(0.1),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
                               ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    'ACTIVE TASK',
-                                    style: theme.textTheme.labelLarge?.copyWith(
-                                      color: const Color(0xFF808080),
-                                      fontSize: 10,
-                                    ),
+                              const SizedBox(height: 16),
+                              
+                              // 各タスクカードをループで表示
+                              ..._activeTasks.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final task = entry.value;
+                                final taskRemaining = task.deadlineAt.difference(now);
+                                final isUrgent = taskRemaining.inMinutes < 10 && taskRemaining.inSeconds > 0;
+                                
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                    bottom: index < _activeTasks.length - 1 ? 16 : 0,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    _current!.title,
-                                    style: theme.textTheme.titleLarge?.copyWith(
-                                      fontSize: 16,
-                                      height: 1.3,
-                                    ),
-                                    textAlign: TextAlign.center,
+                                  child: _TaskCard(
+                                    task: task,
+                                    remaining: taskRemaining,
+                                    isUrgent: isUrgent,
+                                    onComplete: () => _complete(),
+                                    onWithdraw: () => _withdraw(),
+                                    loading: _loading,
                                   ),
-                                  const SizedBox(height: 12),
-                                  // Expected Points
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
+                                );
+                              }).toList(),
+                            
+                            // NEW TASK ボタン（タスクが3つ未満の場合のみ表示）
+                            if (_activeTasks.length < 3) ...[
+                              const SizedBox(height: 24),
+                              GestureDetector(
+                                onTap: _openCreate,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 100),
+                                  width: 160,
+                                  height: 160,
+                                  transform: Matrix4.translationValues(
+                                    0,
+                                    _isButtonPressed ? 4 : 0,
+                                    0,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: _isButtonPressed
+                                          ? [
+                                              const Color(0xFFD0D3E0),
+                                              const Color(0xFFE0E2EC),
+                                            ]
+                                          : [
+                                              const Color(0xFFE0E2EC),
+                                              const Color(0xFFF0F2F8),
+                                            ],
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0A0A0A),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: const Color(0xFFFFD700).withOpacity(0.3),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.star_border_rounded,
-                                          color: const Color(0xFFFFD700),
-                                          size: 14,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '獲得予定: ',
-                                          style: theme.textTheme.bodySmall?.copyWith(
-                                            color: const Color(0xFF808080),
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                        Text(
-                                          '+${min(5, max(1, (_current!.estimateMinutes / 60 / 6).floor()))}',
-                                          style: theme.textTheme.bodyMedium?.copyWith(
-                                            color: const Color(0xFFFFD700),
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (_remaining.inSeconds > 0) ...[
-                                          Text(
-                                            ' +${min(7, _remaining.inSeconds ~/ 3600)}',
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              color: const Color(0xFF00D9FF),
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12,
+                                    boxShadow: _isButtonPressed
+                                        ? [
+                                            BoxShadow(
+                                              color: Colors.white.withOpacity(0.3),
+                                              offset: const Offset(-2, -2),
+                                              blurRadius: 8,
+                                              spreadRadius: 0,
                                             ),
-                                          ),
-                                          Text(
-                                            ' = ${min(5, max(1, (_current!.estimateMinutes / 60 / 6).floor())) + min(7, _remaining.inSeconds ~/ 3600)} pts',
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              color: const Color(0xFFFFD700),
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.15),
+                                              offset: const Offset(2, 2),
+                                              blurRadius: 8,
+                                              spreadRadius: 0,
                                             ),
-                                          ),
-                                        ] else ...[
-                                          Text(
-                                            ' pts',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: const Color(0xFF808080),
-                                              fontSize: 11,
+                                          ]
+                                        : [
+                                            BoxShadow(
+                                              color: Colors.white.withOpacity(0.8),
+                                              offset: const Offset(-6, -6),
+                                              blurRadius: 16,
+                                              spreadRadius: 1,
                                             ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.2),
+                                              offset: const Offset(6, 6),
+                                              blurRadius: 16,
+                                              spreadRadius: 1,
+                                            ),
+                                          ],
                                   ),
-                                  const SizedBox(height: 16),
-                                  // Countdown
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 24,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF0A0A0A),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: urgentMode
-                                            ? const Color(0xFFFF3D3D)
-                                            : const Color(0xFF00D9FF).withOpacity(0.3),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      _fmt(_remaining),
-                                      style: TextStyle(
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.w200,
-                                        letterSpacing: 3,
-                                        color: urgentMode
-                                            ? const Color(0xFFFF3D3D)
-                                            : Colors.white,
-                                        shadows: urgentMode
-                                            ? [
-                                                Shadow(
-                                                  color: const Color(0xFFFF3D3D),
-                                                  blurRadius: 10,
-                                                ),
-                                              ]
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  // Action Buttons
-                                  Row(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          onPressed: _loading ? null : _complete,
-                                          icon: const Icon(Icons.check_circle_outline),
-                                          label: const Text('完了'),
-                                          style: ElevatedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                          ),
-                                        ),
+                                      Icon(
+                                        Icons.add_circle_outline,
+                                        size: 48,
+                                        color: const Color(0xFF8E92AB),
                                       ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: OutlinedButton.icon(
-                                          onPressed: _loading || _current!.extensionUsed
-                                              ? null
-                                              : _extend,
-                                          icon: const Icon(Icons.update),
-                                          label: Text(
-                                            _current!.extensionUsed ? '使用済' : '延長',
-                                          ),
-                                          style: OutlinedButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(vertical: 14),
-                                            disabledForegroundColor: const Color(0xFF4A4A4A),
-                                            disabledBackgroundColor: Colors.transparent,
-                                          ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'NEW\nTASK',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: const Color(0xFF8E92AB),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 3,
+                                          height: 1.2,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 8),
-                                  // 取り下げボタン
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: TextButton.icon(
-                                      onPressed: _loading ? null : _withdraw,
-                                      icon: Icon(
-                                        Icons.delete_outline,
-                                        size: 18,
-                                        color: _loading 
-                                            ? const Color(0xFF4A4A4A)
-                                            : const Color(0xFFFF3D3D),
-                                      ),
-                                      label: Text(
-                                        'タスクを取り下げる',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: _loading 
-                                              ? const Color(0xFF4A4A4A)
-                                              : const Color(0xFFFF3D3D),
-                                        ),
-                                      ),
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 8),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
+                            ],
                             
                             if (_error != null) ...[
                               const SizedBox(height: 16),
@@ -889,6 +845,232 @@ class _LottiePlaceholder extends StatelessWidget {
           height: 120,
           fit: BoxFit.contain,
         ),
+      ),
+    );
+  }
+}
+
+// Neumorphic button widget
+class _NeumorphicButton extends StatelessWidget {
+  const _NeumorphicButton({
+    required this.onPressed,
+    required this.icon,
+    required this.label,
+    this.isSecondary = false,
+    this.iconSize = 22,
+    this.fontSize = 15,
+  });
+
+  final VoidCallback? onPressed;
+  final IconData icon;
+  final String label;
+  final bool isSecondary;
+  final double iconSize;
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onPressed : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          decoration: BoxDecoration(
+            color: enabled
+                ? (isSecondary ? const Color(0xFFE8EAF0) : const Color(0xFF8E92AB))
+                : const Color(0xFFE0E2EC),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: enabled
+                ? [
+                    BoxShadow(
+                      color: Colors.white.withOpacity(0.8),
+                      offset: const Offset(-6, -6),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      offset: const Offset(6, 6),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      offset: const Offset(2, 2),
+                      blurRadius: 6,
+                    ),
+                  ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: enabled
+                    ? (isSecondary ? const Color(0xFF4A4E6D) : Colors.white)
+                    : const Color(0xFFD8DAE5),
+                size: iconSize,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  color: enabled
+                      ? (isSecondary ? const Color(0xFF4A4E6D) : Colors.white)
+                      : const Color(0xFFD8DAE5),
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Task Card Widget
+class _TaskCard extends StatelessWidget {
+  const _TaskCard({
+    required this.task,
+    required this.remaining,
+    required this.isUrgent,
+    required this.onComplete,
+    required this.onWithdraw,
+    required this.loading,
+  });
+
+  final Task task;
+  final Duration remaining;
+  final bool isUrgent;
+  final VoidCallback onComplete;
+  final VoidCallback onWithdraw;
+  final bool loading;
+
+  String _fmt(Duration d) {
+    final neg = d.isNegative;
+    final s = d.inSeconds.abs();
+    final h = (s ~/ 3600).toString().padLeft(2, '0');
+    final m = ((s % 3600) ~/ 60).toString().padLeft(2, '0');
+    final ss = (s % 60).toString().padLeft(2, '0');
+    return (neg ? '-' : '') + '$h:$m:$ss';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8EAF0),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.8),
+            offset: const Offset(-6, -6),
+            blurRadius: 16,
+          ),
+          BoxShadow(
+            color: isUrgent
+                ? const Color(0xFFE57373).withOpacity(0.3)
+                : Colors.black.withOpacity(0.15),
+            offset: const Offset(6, 6),
+            blurRadius: 16,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Task Title
+          Text(
+            task.title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontSize: 16,
+              height: 1.4,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF4A4E6D),
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Countdown
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 16,
+            ),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8EAF0),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.timer_outlined,
+                  size: 20,
+                  color: isUrgent
+                      ? const Color(0xFFE57373)
+                      : const Color(0xFF8E92AB),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _fmt(remaining),
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: 3,
+                    color: isUrgent
+                        ? const Color(0xFFE57373)
+                        : const Color(0xFF4A4E6D),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: _NeumorphicButton(
+                    onPressed: loading ? null : onComplete,
+                    icon: Icons.check_circle_outline,
+                    label: '完了',
+                    iconSize: 18,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: _NeumorphicButton(
+                    onPressed: loading ? null : onWithdraw,
+                    icon: Icons.delete_outline,
+                    label: '取り下げ',
+                    isSecondary: true,
+                    iconSize: 18,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
