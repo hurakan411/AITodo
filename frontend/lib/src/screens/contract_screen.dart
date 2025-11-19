@@ -12,7 +12,7 @@ class ContractScreen extends ConsumerStatefulWidget {
 
 class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProviderStateMixin {
   final List<String> _questions = const [
-    'あなたは、タスクを後回しにしてしまうことを認めますか？',
+    'あなたは、やらなければならないこと（以下、タスクと呼称）を後回しにしてしまうことを認めますか？',
     'あなたは、タスクを完了するために私の力が必要なことを認めますか？',
     'あなたは、"必ず"私の支持するままにタスクを進めることに同意しますか？',
   ];

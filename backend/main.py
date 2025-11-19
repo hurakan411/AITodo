@@ -62,6 +62,9 @@ class Task(BaseModel):
     deadline_at: datetime
     extension_used: bool = False
     weight: int = 1
+    completed_at: Optional[datetime] = None
+    self_report: Optional[str] = None
+    failed_at: Optional[datetime] = None
 
 
 class CompleteRequest(BaseModel):
@@ -86,7 +89,15 @@ class WithdrawRequest(BaseModel):
 class Profile(BaseModel):
     user_id: str
     points: int = 0
-    rank: int = 2
+    
+    @property
+    def rank(self) -> int:
+        """ポイントに基づいてランクを自動計算"""
+        rank = 1
+        for r, th in RANK_THRESHOLDS.items():
+            if self.points >= th:
+                rank = r
+        return rank
 
 
 class StatusResponse(BaseModel):
@@ -112,7 +123,7 @@ class Repo:
 
 class MemoryRepo(Repo):
     def __init__(self):
-        self.profile = Profile(user_id="local", points=10, rank=2)
+        self.profile = Profile(user_id="local", points=10)
         self.tasks: dict[str, Task] = {}
 
     def get_profile(self) -> Profile:
@@ -140,7 +151,7 @@ class MemoryRepo(Repo):
 
     def clear_all(self) -> None:
         self.tasks.clear()
-        self.profile = Profile(user_id="local", points=10, rank=2)
+        self.profile = Profile(user_id="local", points=10)
 
 
 class SupabaseRepo(Repo):
@@ -165,7 +176,7 @@ class SupabaseRepo(Repo):
         return self._user_id
 
     def _row_to_profile(self, row: dict) -> Profile:
-        return Profile(user_id=row['user_id'], points=row.get('points', 10), rank=row.get('rank', 2))
+        return Profile(user_id=row['user_id'], points=row.get('points', 10))
 
     def _row_to_task(self, row: dict) -> Task:
         return Task(
@@ -177,6 +188,9 @@ class SupabaseRepo(Repo):
             deadline_at=datetime.fromisoformat(row['deadline_at'].replace('Z', '+00:00')),
             extension_used=row.get('extension_used', False),
             weight=row.get('weight', 1),
+            completed_at=datetime.fromisoformat(row['completed_at'].replace('Z', '+00:00')) if row.get('completed_at') else None,
+            self_report=row.get('self_report'),
+            failed_at=datetime.fromisoformat(row['failed_at'].replace('Z', '+00:00')) if row.get('failed_at') else None,
         )
 
     def get_profile(self) -> Profile:
@@ -186,7 +200,7 @@ class SupabaseRepo(Repo):
 
     def set_profile(self, p: Profile) -> None:
         uid = self._ensure_user()
-        self.client.table('profiles').update({'points': p.points, 'rank': int(p.rank)}).eq('user_id', uid).execute()
+        self.client.table('profiles').update({'points': p.points}).eq('user_id', uid).execute()
 
     def add_task(self, task: Task) -> Task:
         uid = self._ensure_user()
@@ -212,6 +226,9 @@ class SupabaseRepo(Repo):
             'weight': task.weight,
             'deadline_at': task.deadline_at.isoformat(),
             'extension_used': task.extension_used,
+            'completed_at': task.completed_at.isoformat() if task.completed_at else None,
+            'self_report': task.self_report,
+            'failed_at': task.failed_at.isoformat() if task.failed_at else None,
         }).eq('id', task.id).execute()
         # Fetch the updated task
         updated = self.client.table('tasks').select('*').eq('id', task.id).single().execute()
@@ -285,22 +302,6 @@ AI_PERSONAS = {
     },
 }
 
-RANK_LINES = {
-    1: "...了承。",
-    2: "タスク完了。進捗を記録した。",
-    3: "いいペースだ。続けられそうだな。",
-    4: "お疲れ。よく頑張ったね。",
-    5: "素晴らしいよ。信頼してる。",
-    6: "命令はもういらない。共に進もう。",
-    7: "完璧だ。君は自由だ。",
-}
-
-
-def generate_ai_line(rank: int, context: str = "status") -> str:
-    """
-    ランク別のAIセリフを生成（シンプルな固定セリフ）
-    """
-    return RANK_LINES.get(rank, RANK_LINES[2])
 
 
 def classify_weight(text: str) -> int:
@@ -327,9 +328,7 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         weight = classify_weight(text)
         estimate = max(360, weight * 100)  # 最低6時間
         now = datetime.now(timezone.utc)
-        deadline = now + timedelta(minutes=min(estimate * 2, 24 * 60))
-        if deadline - now < timedelta(hours=6):
-            deadline = now + timedelta(hours=6)
+        deadline = now + timedelta(minutes=estimate)
         return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight)
     
     try:
@@ -368,22 +367,22 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
             raise HTTPException(400, "...何を言っているんですか？")
         
         # 見積もりを依頼
-        estimate_prompt = f"""以下のタスクについて、所要時間と重要度を見積もってください。
+        estimate_prompt = f"""以下のタスクについて、常識的にどれくらい時間がかかるかを見積もってください。
 
 タスク: {text}
 
 以下の基準で判断してください:
-- estimate_hours: 実際にかかる時間（時間単位）。6時間〜24時間の範囲
-- weight: タスクの重要度・複雑度（1=簡単、2=やや簡単、3=普通、4=やや難しい、5=難しい）
-- deadline_hours: 今から何時間後までに完了すべきか（6〜24時間の範囲）
+- estimate_hours: このタスクを完了するのに実際にかかると思われる時間（時間単位）。0.5時間〜24時間の範囲で、現実的に見積もってください
+  * 例: 「メールを1通書く」→ 0.5時間、「レポートを書く」→ 3時間、「プロジェクト企画書作成」→ 8時間
+  * 難易度ではなく、純粋にそのタスクを完了するのに必要な時間を見積もってください
 
 以下のJSON形式で回答してください:
-{{"estimate_hours": 数値, "weight": 数値, "deadline_hours": 数値}}"""
+{{"estimate_hours": 数値}}"""
 
         estimate_response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[
-                {"role": "system", "content": "あなたはタスク管理の専門家です。現実的な見積もりを提供してください。タスクには最低6時間かかるものとして見積もってください。"},
+                {"role": "system", "content": "あなたはタスク管理の専門家です。各タスクに常識的にどれくらい時間がかかるかを、現実的に見積もってください。難易度ではなく、純粋な所要時間を答えてください。"},
                 {"role": "user", "content": estimate_prompt}
             ],
             response_format={"type": "json_object"}
@@ -392,15 +391,16 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         estimate_result = estimate_response.choices[0].message.content
         estimate_data = json.loads(estimate_result)
         
-        # AIの見積もり時間に+5時間を追加
-        ai_estimate_hours = max(6, min(24, estimate_data.get("estimate_hours", 6)))
-        estimate_hours = ai_estimate_hours + 5
-        estimate = estimate_hours * 60  # 時間を分に変換
-        weight = max(1, min(5, estimate_data.get("weight", 3)))
-        deadline_hours = max(6, min(24, estimate_data.get("deadline_hours", 8)))
+        # AIの見積もり時間（純粋な見積もり、ESTIMATE表示用）
+        ai_estimate_hours = max(0.5, min(24, estimate_data.get("estimate_hours", 1)))
+        estimate_minutes = int(ai_estimate_hours * 60)  # ESTIMATEに表示される時間（分）
+        
+        # 締め切り時間（見積もり+6時間、DEADLINE用）
+        deadline_hours_from_now = ai_estimate_hours + 6  # 現在時刻から何時間後か
+        weight = 3  # weightは固定値に
         
         now = datetime.now(timezone.utc)
-        deadline = now + timedelta(hours=deadline_hours)
+        deadline = now + timedelta(hours=deadline_hours_from_now)  # DEADLINE = 今 + 見積もり + 6時間
         
         # ランク別のキャラクター設定を取得
         persona = AI_PERSONAS.get(rank, AI_PERSONAS[1])
@@ -409,7 +409,7 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         comment_prompt = f"""以下のタスクについて、AIアシスタントとして短いコメントを作成してください。
 
 タスク: {text}
-見積もり工数: {estimate_hours}時間
+見積もり工数: {ai_estimate_hours}時間
 重要度: {weight}/5
 
 キャラクター設定:
@@ -442,9 +442,9 @@ Rank 7 (Partner): 「企画書」→ "企画書作成ですね。あなたのア
         
         ai_comment = comment_response.choices[0].message.content.strip().strip('"').strip("'")
         
-        print(f"[AI Estimate] task='{text}', ai_estimate={ai_estimate_hours}h, final_estimate={estimate_hours}h ({estimate}min), weight={weight}, deadline={deadline_hours}h, comment='{ai_comment}'")
+        print(f"[AI Estimate] task='{text}', estimate={ai_estimate_hours}h ({estimate_minutes}min), deadline={deadline_hours_from_now}h from now, weight={weight}, comment='{ai_comment}'")
         
-        return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight, ai_comment=ai_comment)
+        return TaskProposal(title=text.strip(), estimate_minutes=estimate_minutes, deadline_at=deadline, weight=weight, ai_comment=ai_comment)
     
     except HTTPException:
         # HTTPExceptionはそのまま再送出
@@ -455,9 +455,7 @@ Rank 7 (Partner): 「企画書」→ "企画書作成ですね。あなたのア
         weight = classify_weight(text)
         estimate = max(360, weight * 100)  # 最低6時間
         now = datetime.now(timezone.utc)
-        deadline = now + timedelta(minutes=min(estimate * 2, 24 * 60))
-        if deadline - now < timedelta(hours=6):
-            deadline = now + timedelta(hours=6)
+        deadline = now + timedelta(minutes=estimate)
         return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight, ai_comment="このタスクを分析した。実行せよ。")
 
 
@@ -465,12 +463,14 @@ Rank 7 (Partner): 「企画書」→ "企画書作成ですね。あなたのア
 RANK_THRESHOLDS = {
     1: 0,
     2: 10,
-    3: 30,
-    4: 70,
-    5: 130,
-    6: 230,
-    7: 370,
+    3: 20,
+    4: 40,
+    5: 60,
+    6: 80,
+    7: 120,
 }
+
+MAX_POINTS = 120
 
 
 def apply_points_on_success(profile: Profile, task: Task, remaining_seconds: int) -> Profile:
@@ -479,26 +479,19 @@ def apply_points_on_success(profile: Profile, task: Task, remaining_seconds: int
     base = min(5, max(1, int(estimated_hours / 6)))
     # 時間ボーナス: 1時間(3600秒)残るごとに+1pt、最大+7ptまで
     time_bonus = min(7, max(0, remaining_seconds // 3600))
-    profile.points += base + time_bonus
-    return update_rank(profile)
+    profile.points = min(MAX_POINTS, profile.points + base + time_bonus)
+    return profile
 
 
 def apply_points_on_failure(profile: Profile, task: Task) -> Profile:
-    # 減点: 達成時の基本ポイントと同じ（見積もり時間ベース）
+    # 減点: 達成時の基本ポイントの3倍（見積もり時間ベース）
     estimated_hours = task.estimate_minutes / 60
-    penalty = min(5, max(1, int(estimated_hours / 6)))
-    profile.points -= penalty
-    return update_rank(profile)
-
-
-def update_rank(profile: Profile) -> Profile:
-    # derive rank by thresholds
-    rank = 1
-    for r, th in RANK_THRESHOLDS.items():
-        if profile.points >= th:
-            rank = r
-    profile.rank = rank
+    base_penalty = min(5, max(1, int(estimated_hours / 6)))
+    penalty = base_penalty * 3
+    profile.points = max(0, profile.points - penalty)
     return profile
+
+
 
 
 # ---- API ----
@@ -560,16 +553,15 @@ async def complete(req: CompleteRequest):
 
     now = req.completed_at or datetime.now(timezone.utc)
 
-    # minimal execution time: at least 1/5 of estimate
-    min_seconds = max(60, int(task.estimate_minutes * 60 / 5))
+    # minimal execution time: 10 minutes
+    min_seconds = 10 * 60
     elapsed = (now - task.created_at).total_seconds()
     if elapsed < min_seconds:
-        min_minutes = int(min_seconds / 60)
         elapsed_minutes = int(elapsed / 60)
         elapsed_seconds = int(elapsed % 60)
         raise HTTPException(
             400, 
-            f'待て。早すぎる。最低でも{min_minutes}分は作業せよ。現在の経過時間は{elapsed_minutes}分{elapsed_seconds}秒だ。'
+            f'...本当に実施しましたか？最低でも10分は作業してください。現在の経過時間は{elapsed_minutes}分{elapsed_seconds}秒です。'
         )
 
     # success
@@ -577,6 +569,8 @@ async def complete(req: CompleteRequest):
     profile = apply_points_on_success(repo.get_profile(), task, remaining)
     repo.set_profile(profile)
     task.status = TaskStatus.COMPLETED
+    task.completed_at = now
+    task.self_report = req.self_report
     updated = repo.update_task(task)
     return updated
 
@@ -592,6 +586,7 @@ async def withdraw(req: WithdrawRequest):
     
     # タスクを失敗扱いにしてペナルティを適用
     task.status = TaskStatus.FAILED
+    task.failed_at = datetime.now(timezone.utc)
     profile = apply_points_on_failure(repo.get_profile(), task)
     repo.set_profile(profile)
     updated = repo.update_task(task)
@@ -606,6 +601,7 @@ async def current_task():
     for task in active_tasks:
         if now > task.deadline_at:
             task.status = TaskStatus.FAILED
+            task.failed_at = now
             repo.update_task(task)
             profile = apply_points_on_failure(repo.get_profile(), task)
             repo.set_profile(profile)
@@ -623,7 +619,7 @@ async def status():
             next_th = th
             break
     prof = repo.get_profile()
-    ai_line = generate_ai_line(int(prof.rank), "status")
+    ai_line = ""  # Frontend handles AI comments with _rankLine
     # game over condition: rank 1 and at least one failed task in history
     failed_exists = repo.any_failed()
     game_over = int(prof.rank) == 1 and failed_exists

@@ -44,6 +44,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (hasExpired) {
       // pull status to reflect failure/points
       _loadStatus();
+    } else {
+      // Update UI to refresh countdown timers
+      setState(() {});
     }
   }
 
@@ -72,10 +75,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _initializing = false;
       });
       if (_lastPoints != null && s.profile.points < _lastPoints!) {
-        // ポイント減少＝失敗の可能性が高い
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('期限超過：減点が適用されました')),
-        );
+        // ポイント減少＝失敗の可能性が高い（スナックバー表示なし）
       }
       _lastPoints = s.profile.points;
     } catch (e) {
@@ -291,13 +291,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // 最初のアクティブタスクを完了
       await api.complete(_activeTasks.first.id, controller.text.trim());
       await _loadStatus();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('完了を記録しました'),
-          backgroundColor: const Color(0xFF8E92AB),
-        ),
-      );
     } on DioException catch (e) {
       if (!mounted) return;
       
@@ -311,6 +304,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           errorMessage = detail;
         } else if (detail != null && detail is Map) {
           errorMessage = detail.toString();
+        }
+      } else if (e.response?.statusCode == 422) {
+        // 422エラー: バリデーションエラー（詳細）
+        final detail = e.response?.data?['detail'];
+        if (detail != null && detail is String) {
+          errorMessage = detail;
+        } else if (detail != null && detail is List) {
+          // FastAPIのバリデーションエラー形式
+          final errors = detail.map((err) => err['msg'] ?? err.toString()).join('\n');
+          errorMessage = 'バリデーションエラー:\n$errors';
+        } else {
+          errorMessage = 'リクエストデータが不正です。self_reportは3文字以上必要です。';
         }
       } else if (e.response?.statusCode == 404) {
         errorMessage = 'アクティブなタスクが存在しない。確認せよ。';
@@ -563,7 +568,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 
                 // Task Display
                 Expanded(
-                  child: _initializing && _activeTasks.isNotEmpty
+                  child: _initializing
                       ? Center(
                           child: CircularProgressIndicator(
                             color: const Color(0xFF8E92AB),
@@ -654,9 +659,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                         )
-                      : SingleChildScrollView(
+                      : Center(
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               // ACTIVE TASKS ヘッダー
                               Text(
@@ -668,9 +673,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(height: 16),
+                              SizedBox(height: _activeTasks.length == 2 ? 4 : 6),
                               
-                              // 各タスクカードをループで表示
+                              // 各タスクカードをループで表示（タスク数に応じてサイズ調整）
                               ..._activeTasks.asMap().entries.map((entry) {
                                 final index = entry.key;
                                 final task = entry.value;
@@ -679,7 +684,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 
                                 return Padding(
                                   padding: EdgeInsets.only(
-                                    bottom: index < _activeTasks.length - 1 ? 16 : 0,
+                                    bottom: index < _activeTasks.length - 1 ? (_activeTasks.length == 2 ? 2 : 3) : 0,
                                   ),
                                   child: _TaskCard(
                                     task: task,
@@ -688,19 +693,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     onComplete: () => _complete(),
                                     onWithdraw: () => _withdraw(),
                                     loading: _loading,
+                                    taskCount: _activeTasks.length,
                                   ),
                                 );
                               }).toList(),
                             
                             // NEW TASK ボタン（タスクが3つ未満の場合のみ表示）
                             if (_activeTasks.length < 3) ...[
-                              const SizedBox(height: 24),
+                              SizedBox(height: _activeTasks.length == 2 ? 30 : 14),
                               GestureDetector(
                                 onTap: _openCreate,
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 100),
-                                  width: 160,
-                                  height: 160,
+                                  width: _activeTasks.length == 2 ? 110 : 160,
+                                  height: _activeTasks.length == 2 ? 110 : 160,
                                   transform: Matrix4.translationValues(
                                     0,
                                     _isButtonPressed ? 4 : 0,
@@ -756,42 +762,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     children: [
                                       Icon(
                                         Icons.add_circle_outline,
-                                        size: 48,
+                                        size: _activeTasks.length == 2 ? 32 : 48,
                                         color: const Color(0xFF8E92AB),
                                       ),
-                                      const SizedBox(height: 12),
+                                      SizedBox(height: _activeTasks.length == 2 ? 6 : 12),
                                       Text(
                                         'NEW\nTASK',
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: const Color(0xFF8E92AB),
-                                          fontSize: 16,
+                                          fontSize: _activeTasks.length == 2 ? 14 : 16,
                                           fontWeight: FontWeight.bold,
                                           letterSpacing: 3,
                                           height: 1.2,
                                         ),
                                       ),
                                     ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                            
-                            if (_error != null) ...[
-                              const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF3D3D).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: const Color(0xFFFF3D3D).withOpacity(0.3),
-                                  ),
-                                ),
-                                child: Text(
-                                  _error!,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: const Color(0xFFFF3D3D),
                                   ),
                                 ),
                               ),
@@ -851,7 +837,7 @@ class _LottiePlaceholder extends StatelessWidget {
 }
 
 // Neumorphic button widget
-class _NeumorphicButton extends StatelessWidget {
+class _NeumorphicButton extends StatefulWidget {
   const _NeumorphicButton({
     required this.onPressed,
     required this.icon,
@@ -869,67 +855,95 @@ class _NeumorphicButton extends StatelessWidget {
   final double fontSize;
 
   @override
+  State<_NeumorphicButton> createState() => _NeumorphicButtonState();
+}
+
+class _NeumorphicButtonState extends State<_NeumorphicButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled ? onPressed : null,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          decoration: BoxDecoration(
-            color: enabled
-                ? (isSecondary ? const Color(0xFFE8EAF0) : const Color(0xFF8E92AB))
-                : const Color(0xFFE0E2EC),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: enabled
-                ? [
-                    BoxShadow(
-                      color: Colors.white.withOpacity(0.8),
-                      offset: const Offset(-6, -6),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      offset: const Offset(6, 6),
-                      blurRadius: 12,
-                      spreadRadius: 0,
-                    ),
-                  ]
-                : [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      offset: const Offset(2, 2),
-                      blurRadius: 6,
-                    ),
-                  ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: enabled
-                    ? (isSecondary ? const Color(0xFF4A4E6D) : Colors.white)
-                    : const Color(0xFFD8DAE5),
-                size: iconSize,
-              ),
-              const SizedBox(width: 10),
-              Text(
-                label,
+    final enabled = widget.onPressed != null;
+    return GestureDetector(
+      onTapDown: enabled ? (_) => setState(() => _isPressed = true) : null,
+      onTapUp: enabled ? (_) {
+        setState(() => _isPressed = false);
+        widget.onPressed?.call();
+      } : null,
+      onTapCancel: enabled ? () => setState(() => _isPressed = false) : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        transform: Matrix4.translationValues(0, _isPressed ? 2 : 0, 0),
+        decoration: BoxDecoration(
+          color: enabled
+              ? (widget.isSecondary ? const Color(0xFFE8EAF0) : const Color(0xFF8E92AB))
+              : const Color(0xFFE0E2EC),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: enabled
+              ? _isPressed
+                  ? [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.5),
+                        offset: const Offset(-2, -2),
+                        blurRadius: 6,
+                        spreadRadius: 0,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        offset: const Offset(2, 2),
+                        blurRadius: 6,
+                        spreadRadius: 0,
+                      ),
+                    ]
+                  : [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.8),
+                        offset: const Offset(-6, -6),
+                        blurRadius: 12,
+                        spreadRadius: 0,
+                      ),
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        offset: const Offset(6, 6),
+                        blurRadius: 12,
+                        spreadRadius: 0,
+                      ),
+                    ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    offset: const Offset(2, 2),
+                    blurRadius: 6,
+                  ),
+                ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              widget.icon,
+              color: enabled
+                  ? (widget.isSecondary ? const Color(0xFF4A4E6D) : Colors.white)
+                  : const Color(0xFFD8DAE5),
+              size: widget.iconSize,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                widget.label,
                 style: TextStyle(
                   color: enabled
-                      ? (isSecondary ? const Color(0xFF4A4E6D) : Colors.white)
+                      ? (widget.isSecondary ? const Color(0xFF4A4E6D) : Colors.white)
                       : const Color(0xFFD8DAE5),
-                  fontSize: fontSize,
+                  fontSize: widget.fontSize,
                   fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2,
+                  letterSpacing: 0.5,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -945,6 +959,7 @@ class _TaskCard extends StatelessWidget {
     required this.onComplete,
     required this.onWithdraw,
     required this.loading,
+    required this.taskCount,
   });
 
   final Task task;
@@ -953,6 +968,7 @@ class _TaskCard extends StatelessWidget {
   final VoidCallback onComplete;
   final VoidCallback onWithdraw;
   final bool loading;
+  final int taskCount;
 
   String _fmt(Duration d) {
     final neg = d.isNegative;
@@ -967,8 +983,18 @@ class _TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
+    // タスク数に応じてサイズを調整
+    final double padding = taskCount == 1 ? 20 : (taskCount == 2 ? 11 : 12);
+    final double titleFontSize = taskCount == 1 ? 16 : (taskCount == 2 ? 12 : 12);
+    final double timerFontSize = taskCount == 1 ? 32 : (taskCount == 2 ? 24 : 24);
+    final double timerIconSize = taskCount == 1 ? 20 : (taskCount == 2 ? 16 : 16);
+    final double buttonHeight = taskCount == 1 ? 40 : (taskCount == 2 ? 31 : 32);
+    final double buttonFontSize = taskCount == 1 ? 11 : (taskCount == 2 ? 9 : 9);
+    final double buttonIconSize = taskCount == 1 ? 15 : (taskCount == 2 ? 13 : 13);
+    final double verticalSpacing = taskCount == 1 ? 16 : (taskCount == 2 ? 7 : 8);
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
         color: const Color(0xFFE8EAF0),
         borderRadius: BorderRadius.circular(20),
@@ -994,19 +1020,21 @@ class _TaskCard extends StatelessWidget {
           Text(
             task.title,
             style: theme.textTheme.titleMedium?.copyWith(
-              fontSize: 16,
+              fontSize: titleFontSize,
               height: 1.4,
               fontWeight: FontWeight.w600,
               color: const Color(0xFF4A4E6D),
             ),
+            maxLines: taskCount == 3 ? 2 : null,
+            overflow: taskCount == 3 ? TextOverflow.ellipsis : null,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: verticalSpacing),
           
           // Countdown
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 16,
+            padding: EdgeInsets.symmetric(
+              horizontal: padding,
+              vertical: verticalSpacing * 0.8,
             ),
             decoration: BoxDecoration(
               color: const Color(0xFFE8EAF0),
@@ -1017,7 +1045,7 @@ class _TaskCard extends StatelessWidget {
               children: [
                 Icon(
                   Icons.timer_outlined,
-                  size: 20,
+                  size: timerIconSize,
                   color: isUrgent
                       ? const Color(0xFFE57373)
                       : const Color(0xFF8E92AB),
@@ -1026,7 +1054,7 @@ class _TaskCard extends StatelessWidget {
                 Text(
                   _fmt(remaining),
                   style: TextStyle(
-                    fontSize: 32,
+                    fontSize: timerFontSize,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 3,
                     color: isUrgent
@@ -1037,34 +1065,34 @@ class _TaskCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: verticalSpacing),
           
           // Action Buttons
           Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 40,
+                  height: buttonHeight,
                   child: _NeumorphicButton(
                     onPressed: loading ? null : onComplete,
                     icon: Icons.check_circle_outline,
                     label: '完了',
-                    iconSize: 18,
-                    fontSize: 13,
+                    iconSize: buttonIconSize,
+                    fontSize: buttonFontSize,
                   ),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: SizedBox(
-                  height: 40,
+                  height: buttonHeight,
                   child: _NeumorphicButton(
                     onPressed: loading ? null : onWithdraw,
                     icon: Icons.delete_outline,
                     label: '取り下げ',
                     isSecondary: true,
-                    iconSize: 18,
-                    fontSize: 13,
+                    iconSize: buttonIconSize,
+                    fontSize: buttonFontSize,
                   ),
                 ),
               ),

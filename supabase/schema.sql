@@ -2,7 +2,6 @@
 create table if not exists profiles (
   user_id uuid primary key default gen_random_uuid(),
   points int not null default 10,
-  rank int not null default 2,
   created_at timestamptz not null default now()
 );
 

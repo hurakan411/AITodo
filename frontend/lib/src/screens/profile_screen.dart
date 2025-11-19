@@ -19,8 +19,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   List<Task> _recent = [];
   String _aiLine = '';
   String? _error;
-  bool _aiRetryScheduled = false;
   bool _initializing = true;
+  final Set<String> _expandedDates = {}; // アコーディオンの開閉状態を管理
 
   @override
   void initState() {
@@ -42,14 +42,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         _aiLine = fetched.isEmpty ? _rankLine(_rank) : fetched;
         _initializing = false;
       });
-      if ((s.aiLine).trim().isEmpty && !_aiRetryScheduled) {
-        _aiRetryScheduled = true;
-        Future.delayed(const Duration(seconds: 1), () async {
-          if (!mounted) return;
-          _aiRetryScheduled = false;
-          await _load();
-        });
-      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -122,37 +114,86 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 24),
                       
                       // AI Message
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8EAF0),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.white.withOpacity(0.7),
-                              offset: const Offset(-4, -4),
-                              blurRadius: 12,
-                            ),
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
-                              offset: const Offset(4, 4),
-                              blurRadius: 12,
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          _aiLine.isEmpty ? _rankLine(_rank) : _aiLine,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFF4A4E6D),
-                            letterSpacing: 0.8,
-                            fontWeight: FontWeight.w500,
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8EAF0),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.7),
+                                offset: const Offset(-4, -4),
+                                blurRadius: 12,
+                              ),
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                offset: const Offset(4, 4),
+                                blurRadius: 12,
+                              ),
+                            ],
                           ),
-                          textAlign: TextAlign.center,
+                          child: Text(
+                            _aiLine.isEmpty ? _rankLine(_rank) : _aiLine,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: const Color(0xFF4A4E6D),
+                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
                       
                       const SizedBox(height: 32),
+                      
+                      // Character Mode (Inset Neumorphism)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8EAF0),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              // 内側の影（凹み効果） - 影を内側に反転
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.2),
+                                offset: const Offset(-3, -3),
+                                blurRadius: 6,
+                                spreadRadius: -1,
+                              ),
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.8),
+                                offset: const Offset(3, 3),
+                                blurRadius: 6,
+                                spreadRadius: -1,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.psychology_outlined,
+                                size: 18,
+                                color: const Color(0xFF8E92AB),
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                _characterMode(_rank),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: const Color(0xFF4A4E6D),
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.2,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      
+                      const SizedBox(height: 16),
                       
                       // Stats Grid
                       Row(
@@ -294,73 +335,194 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           ),
                         )
                       else
-                        ..._recent.map((task) => Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Container(
-                                padding: const EdgeInsets.all(18),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE8EAF0),
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.white.withOpacity(0.5),
-                                      offset: const Offset(-3, -3),
-                                      blurRadius: 8,
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      offset: const Offset(3, 3),
-                                      blurRadius: 8,
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(task.status),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            task.title,
-                                            style: theme.textTheme.bodyLarge?.copyWith(
-                                              color: const Color(0xFF4A4E6D),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${task.status} · ${(task.estimateMinutes / 60).toStringAsFixed(1)}時間',
-                                            style: theme.textTheme.bodySmall?.copyWith(
-                                              color: const Color(0xFF8E92AB),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Icon(
-                                      _getStatusIcon(task.status),
-                                      size: 22,
-                                      color: _getStatusColor(task.status),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )),
+                        ..._buildTasksByDate(),
                     ],
                   ),
                 ),
               ),
       ),
     );
+  }
+  
+  // タスクを年月ごとにグループ化してアコーディオンで表示
+  List<Widget> _buildTasksByDate() {
+    // タスクを年月ごとにグループ化
+    final Map<String, List<Task>> tasksByMonth = {};
+    
+    for (final task in _recent) {
+      final date = DateTime(
+        task.createdAt.year,
+        task.createdAt.month,
+      );
+      final monthKey = '${date.year}-${date.month.toString().padLeft(2, '0')}';
+      tasksByMonth.putIfAbsent(monthKey, () => []).add(task);
+    }
+    
+    // 年月の降順でソート
+    final sortedMonths = tasksByMonth.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+    
+    return sortedMonths.map((monthKey) {
+      final tasks = tasksByMonth[monthKey]!;
+      final isExpanded = _expandedDates.contains(monthKey);
+      final parts = monthKey.split('-');
+      final year = int.parse(parts[0]);
+      final month = int.parse(parts[1]);
+      final monthLabel = '$year年${month}月';
+      
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8EAF0),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.5),
+                offset: const Offset(-3, -3),
+                blurRadius: 8,
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                offset: const Offset(3, 3),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // 年月ヘッダー（クリック可能）
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    if (isExpanded) {
+                      _expandedDates.remove(monthKey);
+                    } else {
+                      _expandedDates.add(monthKey);
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isExpanded ? Icons.expand_more : Icons.chevron_right,
+                        color: const Color(0xFF8E92AB),
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        monthLabel,
+                        style: const TextStyle(
+                          color: Color(0xFF4A4E6D),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8E92AB).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${tasks.length}件',
+                          style: const TextStyle(
+                            color: Color(0xFF8E92AB),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // タスクリスト（展開時のみ表示）
+              if (isExpanded)
+                Container(
+                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+                  child: Column(
+                    children: tasks.map((task) {
+                      // 日付を表示
+                      final taskDate = task.createdAt;
+                      final dateLabel = '${taskDate.month}/${taskDate.day}';
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8EAF0),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.05),
+                                offset: const Offset(2, 2),
+                                blurRadius: 4,
+                              ),
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.5),
+                                offset: const Offset(-2, -2),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: _getStatusColor(task.status),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      task.title,
+                                      style: const TextStyle(
+                                        color: Color(0xFF4A4E6D),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '$dateLabel · ${task.status} · ${(task.estimateMinutes / 60).toStringAsFixed(1)}時間',
+                                      style: const TextStyle(
+                                        color: Color(0xFF8E92AB),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                _getStatusIcon(task.status),
+                                size: 18,
+                                color: _getStatusColor(task.status),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }).toList();
   }
   
   Color _getRankColor(int rank) {
@@ -408,13 +570,34 @@ String _rankLine(int rank) {
     case 4:
       return '観測継続。必要なら助言する。';
     case 5:
-      return 'よくできています。次に備えましょう。';
+      return '悪くありません。頑張っています。';
     case 6:
-      return '焦らず進もう。必要なら支援する。';
+      return 'よく頑張っています。無理しすぎないように。';
     case 7:
-      return 'ここまで順調です。任せて進みましょう。';
+      return 'あなたは完璧です。これからもよろしくお願いしますね。';
     default:
       return '...';
+  }
+}
+
+String _characterMode(int rank) {
+  switch (rank) {
+    case 1:
+      return '失望モード';
+    case 2:
+      return '無機質モード';
+    case 3:
+      return '分析者モード';
+    case 4:
+      return '監視者モード';
+    case 5:
+      return '助言者モード';
+    case 6:
+      return '守護者モード';
+    case 7:
+      return '相棒モード';
+    default:
+      return '不明';
   }
 }
 
@@ -454,6 +637,7 @@ class _StatCard extends StatelessWidget {
         ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 36, color: const Color(0xFF8E92AB)),
           const SizedBox(height: 14),

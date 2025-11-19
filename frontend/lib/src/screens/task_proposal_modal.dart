@@ -49,8 +49,8 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
     final theme = Theme.of(context);
     final p = widget.proposal;
     
-    // UTC時刻をJST(+8時間)に変換
-    final deadlineJst = p.deadlineAt.add(const Duration(hours: 8));
+    // UTC時刻をJST(+9時間)に変換
+    final deadlineJst = p.deadlineAt.add(const Duration(hours: 9));
     
     // ポイント計算: 見積もり時間から算出
     final estimatedHours = p.estimateMinutes / 60;
