@@ -20,6 +20,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   String _aiLine = '';
   String? _error;
   bool _initializing = true;
+  String _userId = '';
   final Set<String> _expandedDates = {}; // アコーディオンの開閉状態を管理
 
   @override
@@ -36,12 +37,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       setState(() {
         _points = s.profile.points;
         _rank = s.profile.rank;
+        _userId = s.profile.userId;
         _nextThreshold = s.nextThreshold;
         _recent = s.recentTasks;
         final fetched = (s.aiLine).trim();
         _aiLine = fetched.isEmpty ? _rankLine(_rank) : fetched;
         _initializing = false;
       });
+
+      if (_points <= 0 && mounted) {
+        context.go('/gameover');
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -109,6 +115,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // User ID display
+                      if (_userId.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            _userId.toLowerCase() == 'local' 
+                              ? 'LOCAL MODE'
+                              : 'ID: ${_userId.length > 8 ? _userId.substring(0, 8) : _userId}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: const Color(0xFF8E92AB).withOpacity(0.4),
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      
                       // AI Character
                       const Center(child: _LottiePlaceholder()),
                       const SizedBox(height: 24),
@@ -271,28 +294,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               ],
                             ),
                             const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE8EAF0),
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      offset: const Offset(2, 2),
-                                      blurRadius: 4,
-                                      spreadRadius: 0,
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.white.withOpacity(0.5),
-                                      offset: const Offset(-2, -2),
-                                      blurRadius: 4,
-                                      spreadRadius: 0,
-                                    ),
-                                  ],
-                                ),
+                            Container(
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8EAF0),
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.2),
+                                    offset: const Offset(-2, -2),
+                                    blurRadius: 4,
+                                    spreadRadius: -1,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.white.withOpacity(0.8),
+                                    offset: const Offset(2, 2),
+                                    blurRadius: 4,
+                                    spreadRadius: -1,
+                                  ),
+                                ],
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
                                 child: LinearProgressIndicator(
                                   value: _nextThreshold > 0
                                       ? (_points / _nextThreshold).clamp(0.0, 1.0)

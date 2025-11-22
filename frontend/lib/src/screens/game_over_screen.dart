@@ -129,7 +129,7 @@ class GameOverScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'データは消去された。\n再契約を試みるがいい。',
+                        'データは消去されました。\n新たなAIと再契約してください。',
                         style: theme.textTheme.bodyLarge?.copyWith(
                           height: 1.8,
                           letterSpacing: 0.5,

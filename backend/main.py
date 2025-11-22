@@ -151,6 +151,7 @@ class MemoryRepo(Repo):
 
     def clear_all(self) -> None:
         self.tasks.clear()
+        # Reset points to default (10) as per requirement
         self.profile = Profile(user_id="local", points=10)
 
 
@@ -251,9 +252,10 @@ class SupabaseRepo(Repo):
 
     def clear_all(self) -> None:
         uid = self._ensure_user()
-        # delete tasks then reset profile
+        # delete all tasks and reset profile to initial state
         self.client.table('tasks').delete().eq('user_id', uid).execute()
-        self.client.table('profiles').update({'points': 0, 'rank': 2}).eq('user_id', uid).execute()
+        # Reset points to default (10) as per requirement
+        self.client.table('profiles').update({'points': 10}).eq('user_id', uid).execute()
 
 
 # Repo selector

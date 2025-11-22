@@ -12,9 +12,9 @@ class ContractScreen extends ConsumerStatefulWidget {
 
 class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProviderStateMixin {
   final List<String> _questions = const [
-    'あなたは、やらなければならないこと（以下、タスクと呼称）を後回しにしてしまうことを認めますか？',
-    'あなたは、タスクを完了するために私の力が必要なことを認めますか？',
-    'あなたは、"必ず"私の支持するままにタスクを進めることに同意しますか？',
+    'あなたは、\n自身がタスクを後回しにする傾向を\n有していることを認めますか？',
+    'あなたは、\nその傾向を修正するために、\n私の統制が必要であることを\n認めますか？',
+    'あなたは、\n以後のタスク遂行において、\n私の指示を絶対として従うことに\n同意しますか？',
   ];
 
   late List<bool?> _answers;
@@ -27,7 +27,14 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
   @override
   void initState() {
     super.initState();
+    _initializeState();
+  }
+  
+  void _initializeState() {
     _answers = List<bool?>.filled(_questions.length, null);
+    _currentQuestion = 0;
+    _isTransitioning = false;
+    _showFinalMessage = false;
     
     // アニメーションコントローラーを作成
     _fadeController = AnimationController(
@@ -55,6 +62,7 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
       _answers = List<bool?>.filled(_questions.length, null);
       _currentQuestion = 0;
       _isTransitioning = false;
+      _showFinalMessage = false;
     });
     _fadeController.reset();
     _fadeController.forward();
@@ -123,7 +131,7 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
                   child: _showFinalMessage
                       ? Column(
                           children: [
-                            Text(
+                            _TypewriterText(
                               '契約は成立した',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 color: Colors.white,
@@ -135,8 +143,8 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 40),
-                            Text(
-                              'あなたはAIに従う',
+                            _TypewriterText(
+                              '今後、あなたは\n\n私に従うことを誓約しました。\n\nすべてのタスクは、\n私の指示した期限までに\n実行されなければなりません。',
                               style: theme.textTheme.bodyLarge?.copyWith(
                                 color: Colors.white.withOpacity(0.7),
                                 height: 1.6,
@@ -162,8 +170,9 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
                             const SizedBox(height: 40),
                             
                             // 質問テキスト
-                            Text(
+                            _TypewriterText(
                               _questions[_currentQuestion],
+                              key: ValueKey(_currentQuestion), // 質問が変わるたびにリセット
                               style: theme.textTheme.headlineSmall?.copyWith(
                                 color: Colors.white,
                                 height: 1.6,
@@ -241,6 +250,77 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
           ),
         ),
       ),
+    );
+  }
+}
+
+class _TypewriterText extends StatefulWidget {
+  final String text;
+  final TextStyle? style;
+  final TextAlign? textAlign;
+  final Duration duration;
+
+  const _TypewriterText(
+    this.text, {
+    this.style,
+    this.textAlign,
+    this.duration = const Duration(milliseconds: 50),
+    super.key,
+  });
+
+  @override
+  State<_TypewriterText> createState() => _TypewriterTextState();
+}
+
+class _TypewriterTextState extends State<_TypewriterText>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<int> _characterCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.duration * widget.text.length,
+    );
+    _characterCount = StepTween(begin: 0, end: widget.text.length).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.linear),
+    );
+    _controller.forward();
+  }
+
+  @override
+  void didUpdateWidget(_TypewriterText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _controller.duration = widget.duration * widget.text.length;
+      _characterCount = StepTween(begin: 0, end: widget.text.length).animate(
+        CurvedAnimation(parent: _controller, curve: Curves.linear),
+      );
+      _controller.reset();
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _characterCount,
+      builder: (context, child) {
+        final text = widget.text.substring(0, _characterCount.value);
+        return Text(
+          text,
+          style: widget.style,
+          textAlign: widget.textAlign,
+        );
+      },
     );
   }
 }
