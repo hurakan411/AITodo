@@ -286,13 +286,120 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_activeTasks.isEmpty) return;
     
     setState(() => _loading = true);
+    
+    // Show loading dialog immediately
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: const Color(0xFFE8EAF0),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                color: const Color(0xFF6B7FD7),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'AIがコメントを生成中...',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: const Color(0xFF4A4E6D),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    
     try {
       final api = ref.read(apiClientProvider);
       // 最初のアクティブタスクを完了
-      await api.complete(_activeTasks.first.id, controller.text.trim());
+      final completedTask = await api.complete(_activeTasks.first.id, controller.text.trim());
       await _loadStatus();
+      
+      if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.pop(context);
+      
+      // AIコメントがあれば表示
+      if (completedTask.aiCompletionComment != null && completedTask.aiCompletionComment!.isNotEmpty) {
+        // Show AI comment dialog
+        await showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFFE8EAF0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  color: const Color(0xFF6B7FD7),
+                  size: 28,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Obeyneからのコメント',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: const Color(0xFF4A4E6D),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF6B7FD7).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Text(
+                    completedTask.aiCompletionComment!,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      height: 1.6,
+                      color: const Color(0xFF4A4E6D),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6B7FD7),
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('閉じる'),
+              ),
+            ],
+          ),
+        );
+      }
     } on DioException catch (e) {
       if (!mounted) return;
+      
+      // Close loading dialog
+      Navigator.pop(context);
       
       // サーバーからのエラーメッセージを抽出
       String errorMessage = '処理を受け付けられない。';
@@ -414,7 +521,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'タスクを取り下げるか？',
+              'タスクを取り下げますか？',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
                 height: 1.5,
@@ -423,7 +530,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              '取り下げは失敗扱いだ。\nペナルティが適用される。',
+              '命令に背くつもりですか？\nペナルティを適用します。',
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: const Color(0xFF8E92AB),
                 height: 1.5,
@@ -503,7 +610,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OBEY'),
+        title: const Text('Obeyne'),
         actions: [
           IconButton(
             onPressed: () => context.go('/profile'),
@@ -532,7 +639,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               children: [
                 // AI Character
                 const _LottiePlaceholder(),
-                const SizedBox(height: 8),
+                // Removed SizedBox(height: 8) to reduce spacing
                 
                 // AI Message
                 Container(
@@ -823,7 +930,7 @@ class _LottiePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 140,
+      height: 120,
       child: Center(
         child: Lottie.asset(
           'assets/lottie/AI Brain.json',

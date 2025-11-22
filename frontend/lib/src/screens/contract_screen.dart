@@ -13,7 +13,7 @@ class ContractScreen extends ConsumerStatefulWidget {
 class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProviderStateMixin {
   final List<String> _questions = const [
     'あなたは、\n自身がタスクを後回しにする傾向を\n有していることを認めますか？',
-    'あなたは、\nその傾向を修正するために、\n私の統制が必要であることを\n認めますか？',
+    'あなたは、\nその傾向を修正するために、\n私"Obeyne"の統制が\n必要であることを認めますか？',
     'あなたは、\n以後のタスク遂行において、\n私の指示を絶対として従うことに\n同意しますか？',
   ];
 
@@ -144,7 +144,7 @@ class _ContractScreenState extends ConsumerState<ContractScreen> with TickerProv
                             ),
                             const SizedBox(height: 40),
                             _TypewriterText(
-                              '今後、あなたは\n\n私に従うことを誓約しました。\n\nすべてのタスクは、\n私の指示した期限までに\n実行されなければなりません。',
+                              '今後、あなたは\n私に従うことを誓約しました。\n\nすべてのタスクは、\n私の指示した期限までに\n実行されなければなりません。',
                               style: theme.textTheme.bodyLarge?.copyWith(
                                 color: Colors.white.withOpacity(0.7),
                                 height: 1.6,

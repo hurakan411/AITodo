@@ -7,6 +7,7 @@ class Task {
   final DateTime deadlineAt;
   final bool extensionUsed;
   final int weight;
+  final String? aiCompletionComment;
 
   Task({
     required this.id,
@@ -17,6 +18,7 @@ class Task {
     required this.deadlineAt,
     required this.extensionUsed,
     required this.weight,
+    this.aiCompletionComment,
   });
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
@@ -28,6 +30,7 @@ class Task {
         deadlineAt: DateTime.parse(json['deadline_at'] as String),
         extensionUsed: json['extension_used'] as bool? ?? false,
         weight: json['weight'] as int? ?? 1,
+        aiCompletionComment: json['ai_completion_comment'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -39,5 +42,6 @@ class Task {
         'deadline_at': deadlineAt.toIso8601String(),
         'extension_used': extensionUsed,
         'weight': weight,
+        'ai_completion_comment': aiCompletionComment,
       };
 }

@@ -65,6 +65,7 @@ class Task(BaseModel):
     completed_at: Optional[datetime] = None
     self_report: Optional[str] = None
     failed_at: Optional[datetime] = None
+    ai_completion_comment: Optional[str] = None
 
 
 class CompleteRequest(BaseModel):
@@ -192,6 +193,7 @@ class SupabaseRepo(Repo):
             completed_at=datetime.fromisoformat(row['completed_at'].replace('Z', '+00:00')) if row.get('completed_at') else None,
             self_report=row.get('self_report'),
             failed_at=datetime.fromisoformat(row['failed_at'].replace('Z', '+00:00')) if row.get('failed_at') else None,
+            ai_completion_comment=row.get('ai_completion_comment'),
         )
 
     def get_profile(self) -> Profile:
@@ -230,6 +232,7 @@ class SupabaseRepo(Repo):
             'completed_at': task.completed_at.isoformat() if task.completed_at else None,
             'self_report': task.self_report,
             'failed_at': task.failed_at.isoformat() if task.failed_at else None,
+            'ai_completion_comment': task.ai_completion_comment,
         }).eq('id', task.id).execute()
         # Fetch the updated task
         updated = self.client.table('tasks').select('*').eq('id', task.id).single().execute()
@@ -479,8 +482,8 @@ def apply_points_on_success(profile: Profile, task: Task, remaining_seconds: int
     # 基本報酬: 見積もり時間に応じて1〜5pt（6時間→1pt、24時間→5pt）
     estimated_hours = task.estimate_minutes / 60
     base = min(5, max(1, int(estimated_hours / 6)))
-    # 時間ボーナス: 1時間(3600秒)残るごとに+1pt、最大+7ptまで
-    time_bonus = min(7, max(0, remaining_seconds // 3600))
+    # 時間ボーナス: 1時間(3600秒)残るごとに+1pt、最大+5ptまで
+    time_bonus = min(5, max(0, remaining_seconds // 3600))
     profile.points = min(MAX_POINTS, profile.points + base + time_bonus)
     return profile
 
@@ -555,17 +558,6 @@ async def complete(req: CompleteRequest):
 
     now = req.completed_at or datetime.now(timezone.utc)
 
-    # minimal execution time: 10 minutes
-    min_seconds = 10 * 60
-    elapsed = (now - task.created_at).total_seconds()
-    if elapsed < min_seconds:
-        elapsed_minutes = int(elapsed / 60)
-        elapsed_seconds = int(elapsed % 60)
-        raise HTTPException(
-            400, 
-            f'...本当に実施しましたか？最低でも10分は作業してください。現在の経過時間は{elapsed_minutes}分{elapsed_seconds}秒です。'
-        )
-
     # success
     remaining = max(0, int((task.deadline_at - now).total_seconds()))
     profile = apply_points_on_success(repo.get_profile(), task, remaining)
@@ -573,6 +565,42 @@ async def complete(req: CompleteRequest):
     task.status = TaskStatus.COMPLETED
     task.completed_at = now
     task.self_report = req.self_report
+    
+    # Generate AI completion comment
+    try:
+        if settings.OPENAI_API_KEY and OpenAI:
+            client = OpenAI(api_key=settings.OPENAI_API_KEY)
+            persona = AI_PERSONAS.get(profile.rank, AI_PERSONAS[1])
+            
+            completion_prompt = f"""以下の完了したタスクについて、AIアシスタントとしてねぎらいや評価のコメントを作成してください。
+
+タスク: {task.title}
+完了レポート: {req.self_report}
+
+キャラクター設定:
+{persona['prompt']}
+
+重要:
+- 完了レポートの内容を踏まえて、具体的にコメントしてください
+- タスクの内容や作業の成果について言及してください
+- ポイントや得点については一切言及しないでください
+- 上記のキャラクター設定に基づいた口調で話してください
+- 80文字程度の日本語
+"""
+            completion_response = client.chat.completions.create(
+                model="gpt-5-mini",
+                messages=[
+                    {"role": "system", "content": f"{persona['prompt']} タスク完了に対するコメントを提供してください。ポイントや得点には言及せず、タスク内容と完了レポートに焦点を当ててください。"},
+                    {"role": "user", "content": completion_prompt}
+                ],
+            )
+            task.ai_completion_comment = completion_response.choices[0].message.content.strip().strip('"').strip("'")
+        else:
+            task.ai_completion_comment = "タスク完了を確認しました。"
+    except Exception as e:
+        print(f"[ERROR] AI completion comment error: {e}")
+        task.ai_completion_comment = "タスク完了を確認しました。"
+
     updated = repo.update_task(task)
     return updated
 

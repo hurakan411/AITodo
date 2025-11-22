@@ -134,7 +134,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       
                       // AI Character
                       const Center(child: _LottiePlaceholder()),
-                      const SizedBox(height: 24),
+                      // Removed SizedBox(height: 24) to reduce spacing
                       
                       // AI Message
                       Center(
@@ -692,7 +692,7 @@ class _LottiePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 120,
+      height: 100,
       child: Center(
         child: Lottie.asset(
           'assets/lottie/AI Brain.json',
