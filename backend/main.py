@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Iterable
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 import os
@@ -157,24 +157,37 @@ class MemoryRepo(Repo):
 
 
 class SupabaseRepo(Repo):
-    def __init__(self, client):  # type: ignore
+    def __init__(self, client, user_id: str):  # type: ignore
         self.client = client
-        # Lazy user bootstrap
-        self._user_id: Optional[str] = None
+        self._user_id = user_id
 
     def _ensure_user(self) -> str:
-        if self._user_id:
-            return self._user_id
-        # Try to get first profile; if none, insert one
-        res = self.client.table('profiles').select('*').limit(1).execute()
+        """Ensure user profile exists for the given user_id"""
+        if not self._user_id:
+            raise ValueError("User ID is required")
+        
+        # Check if profile exists for this user_id
+        res = self.client.table('profiles').select('*').eq('user_id', self._user_id).execute()
         data = res.data or []
+        
         if data:
-            self._user_id = data[0]['user_id']
+            # Profile exists
             return self._user_id
-        ins = self.client.table('profiles').insert({}).execute()
-        # After insert, fetch the created profile
-        fetch = self.client.table('profiles').select('*').limit(1).execute()
-        self._user_id = fetch.data[0]['user_id']
+        
+        # Create new profile for this user_id
+        try:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            self.client.table('profiles').insert({
+                'user_id': self._user_id, 
+                'points': 10, 
+                'rank': 2,
+                'created_at': now_iso
+            }).execute()
+        except Exception as e:
+            print(f"Error creating profile for {self._user_id}: {e}")
+            # Re-raise the exception to see it in the logs
+            raise e
+            
         return self._user_id
 
     def _row_to_profile(self, row: dict) -> Profile:
@@ -262,17 +275,21 @@ class SupabaseRepo(Repo):
 
 
 # Repo selector
-def get_repo() -> Repo:
+def get_repo(user_id: str = "local") -> Repo:
+    if user_id == "local":
+        return MemoryRepo()
+        
     if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY and create_client is not None:
         try:
+            # print(f"DEBUG: get_repo called with user_id={user_id}")
             client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
-            return SupabaseRepo(client)
-        except Exception:
+            return SupabaseRepo(client, user_id)
+        except Exception as e:
+            print(f"Error creating Supabase client: {e}")
             pass
     return MemoryRepo()
 
 
-repo: Repo = get_repo()
 
 
 # ---- Rule-based AI lines ----
@@ -501,26 +518,34 @@ def apply_points_on_failure(profile: Profile, task: Task) -> Profile:
 
 # ---- API ----
 @app.post('/tasks/propose', response_model=TaskProposal)
-async def propose(req: ProposeRequest):
+async def propose(req: ProposeRequest, x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
     profile = repo.get_profile()
     return propose_estimate_and_deadline(req.text, profile.rank)
 
 
 @app.post('/tasks/accept', response_model=Task)
-async def accept(proposal: TaskProposal):
+async def accept(req: TaskProposal, x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
     active_tasks = repo.get_active_tasks()
     if len(active_tasks) >= 3:
-        raise HTTPException(400, '既に3つのタスクが進行中です')
-    # id is assigned by repo (Supabase) when needed; memory uses provided
+        raise HTTPException(400, 'タスクは同時に3つまでしか持てません')
+    
+    # check game over
+    if repo.any_failed() and repo.get_profile().rank == 1:
+        raise HTTPException(400, 'ゲームオーバー状態です。これ以上タスクを受けられません。')
+
+    now = datetime.now(timezone.utc)
     task = Task(
-        id=f"task_{int(datetime.now().timestamp())}",
-        title=proposal.title,
-        status=TaskStatus.ACTIVE,
-        estimate_minutes=proposal.estimate_minutes,
-        created_at=datetime.now(timezone.utc),
-        deadline_at=proposal.deadline_at,
-        extension_used=False,
-        weight=proposal.weight,
+        id=str(uuid.uuid4()),
+        title=req.title,
+        status=TaskStatus.ACTIVE, # Keep status as ACTIVE
+        estimate_minutes=req.estimate_minutes,
+        created_at=now,
+        deadline_at=req.deadline_at,
+        extension_used=False, # Keep extension_used as False
+        weight=1,
+        ai_completion_comment=req.ai_comment
     )
     try:
         created = repo.add_task(task)
@@ -534,22 +559,25 @@ async def accept(proposal: TaskProposal):
 
 
 @app.post('/tasks/extend', response_model=Task)
-async def extend(req: ExtendRequest):
-    # Find the specific task by ID
+async def extend(req: ExtendRequest, x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
     active_tasks = repo.get_active_tasks()
     task = next((t for t in active_tasks if t.id == req.task_id), None)
     if not task:
         raise HTTPException(404, '指定されたタスクが見つかりません')
+    
     if task.extension_used:
-        raise HTTPException(400, 'Extension already used')
-    task.deadline_at = task.deadline_at + timedelta(minutes=req.extra_minutes)
+        raise HTTPException(400, '延長は1回までです')
+    
+    task.deadline_at += timedelta(minutes=req.extra_minutes)
     task.extension_used = True
     updated = repo.update_task(task)
     return updated
 
 
 @app.post('/tasks/complete', response_model=Task)
-async def complete(req: CompleteRequest):
+async def complete(req: CompleteRequest, x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
     # Find the specific task by ID
     active_tasks = repo.get_active_tasks()
     task = next((t for t in active_tasks if t.id == req.task_id), None)
@@ -566,11 +594,11 @@ async def complete(req: CompleteRequest):
     task.completed_at = now
     task.self_report = req.self_report
     
-    # Generate AI completion comment
-    try:
-        if settings.OPENAI_API_KEY and OpenAI:
+    # AI Comment Generation
+    if settings.OPENAI_API_KEY:
+        try:
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
-            persona = AI_PERSONAS.get(profile.rank, AI_PERSONAS[1])
+            persona = AI_PERSONAS.get(profile.rank, AI_PERSONAS[2])
             
             completion_prompt = f"""以下の完了したタスクについて、AIアシスタントとしてねぎらいや評価のコメントを作成してください。
 
@@ -594,37 +622,33 @@ async def complete(req: CompleteRequest):
                     {"role": "user", "content": completion_prompt}
                 ],
             )
-            task.ai_completion_comment = completion_response.choices[0].message.content.strip().strip('"').strip("'")
-        else:
+            task.ai_completion_comment = completion_response.choices[0].message.content
+        except Exception as e:
+            print(f"AI generation failed: {e}")
+            # Fallback
             task.ai_completion_comment = "タスク完了を確認しました。"
-    except Exception as e:
-        print(f"[ERROR] AI completion comment error: {e}")
-        task.ai_completion_comment = "タスク完了を確認しました。"
 
     updated = repo.update_task(task)
     return updated
 
 
 @app.post('/tasks/withdraw', response_model=Task)
-async def withdraw(req: WithdrawRequest):
-    """進行中のタスクを取り下げ（ペナルティあり）"""
-    # Find the specific task by ID
+async def withdraw(req: WithdrawRequest, x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
     active_tasks = repo.get_active_tasks()
     task = next((t for t in active_tasks if t.id == req.task_id), None)
     if not task:
         raise HTTPException(404, '指定されたタスクが見つかりません')
     
-    # タスクを失敗扱いにしてペナルティを適用
     task.status = TaskStatus.FAILED
     task.failed_at = datetime.now(timezone.utc)
+    repo.update_task(task)
     profile = apply_points_on_failure(repo.get_profile(), task)
     repo.set_profile(profile)
-    updated = repo.update_task(task)
-    return updated
+    return task
 
 
-@app.get('/tasks/current', response_model=List[Task])
-async def current_task():
+def _check_overdue(repo: Repo):
     # mark overdue as failed if necessary
     active_tasks = repo.get_active_tasks()
     now = datetime.now(timezone.utc)
@@ -635,13 +659,19 @@ async def current_task():
             repo.update_task(task)
             profile = apply_points_on_failure(repo.get_profile(), task)
             repo.set_profile(profile)
+
+@app.get('/tasks/current', response_model=List[Task])
+async def current_task(x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
+    _check_overdue(repo)
     return repo.get_active_tasks()
 
 
 @app.get('/status', response_model=StatusResponse)
-async def status():
+async def status(x_user_id: str = Header(default="local")):
+    repo = get_repo(x_user_id)
     # also trigger overdue check here
-    await current_task()
+    _check_overdue(repo)
     next_th = 10
     for r in sorted(RANK_THRESHOLDS):
         th = RANK_THRESHOLDS[r]
@@ -669,7 +699,8 @@ async def health():
 
 
 @app.post('/gameover/ack')
-async def gameover_ack():
+async def gameover_ack(x_user_id: str = Header(default="local")):
     # purge all data and reset profile
+    repo = get_repo(x_user_id)
     repo.clear_all()
     return {"ok": True}

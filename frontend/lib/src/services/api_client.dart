@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task.dart';
 import '../models/proposal.dart';
 import '../models/profile.dart';
+import 'user_id_service.dart';
 
 class ApiClient {
   ApiClient(this._dio);
@@ -100,9 +101,19 @@ class StatusPayload {
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final dio = Dio(BaseOptions(
-    baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:8000'),
+    baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://aitodo-n7nc.onrender.com'),
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 30),
   ));
+  
+  // Add interceptor to include user ID in all requests
+  dio.interceptors.add(InterceptorsWrapper(
+    onRequest: (options, handler) async {
+      final userId = await UserIdService.getUserId();
+      options.headers['X-User-ID'] = userId;
+      handler.next(options);
+    },
+  ));
+  
   return ApiClient(dio);
 });
