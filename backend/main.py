@@ -180,7 +180,6 @@ class SupabaseRepo(Repo):
             self.client.table('profiles').insert({
                 'user_id': self._user_id, 
                 'points': 10, 
-                'rank': 2,
                 'created_at': now_iso
             }).execute()
         except Exception as e:
