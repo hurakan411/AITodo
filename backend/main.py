@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 import os
+import uuid
 
 try:
     from openai import OpenAI  # type: ignore
