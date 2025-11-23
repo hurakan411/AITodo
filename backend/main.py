@@ -365,129 +365,79 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
     try:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         
-        # まずタスクの妥当性を確認（寛容だが明らかな無意味は拒否）
-        validation_prompt = f"""以下のテキストがタスクとして成立するか判定してください。
-
-入力: {text}
-
-判定基準:
-- 何らかの作業を示唆する内容が含まれていればOK
-- ただし、以下は必ず拒否してください:
-    - 同じ文字の繰り返し（例: "aaa", "1111", "!!!!!"）
-    - 記号のみ、数字のみ、ランダムな文字列（例: "!@#$", "12345", "asdfghjkl"）
-    - 意味の通る日本語・英語以外の文字列
-- 単語や短いフレーズでも、作業の意図が読み取れれば受け入れる
-
-以下のJSON形式で回答してください:
-{{"valid": true/false, "reason": "理由（妥当でない場合のみ）"}}"""
-
-        validation_response = client.chat.completions.create(
-            model="gpt-5-nano",
-            messages=[
-                {"role": "system", "content": "あなたはタスク管理のAIアシスタントです。ユーザーの入力を寛容に評価し、できるだけタスクとして受け入れてください。曖昧な入力でも、何らかの作業を示唆していればOKです。"},
-                {"role": "user", "content": validation_prompt}
-            ],
-            response_format={"type": "json_object"}
-        )
-        
-        validation_result = validation_response.choices[0].message.content
-        import json
-        validation_data = json.loads(validation_result)
-        
-        if not validation_data.get("valid", False):
-            raise HTTPException(400, "...何を言っているんですか？")
-        
-        # 見積もりを依頼
-        estimate_prompt = f"""以下のタスクについて、常識的にどれくらい時間がかかるかを見積もってください。
-
-タスク: {text}
-
-以下の基準で判断してください:
-- estimate_hours: このタスクを完了するのに実際にかかると思われる時間（時間単位）。0.5時間〜24時間の範囲で、現実的に見積もってください
-  * 例: 「メールを1通書く」→ 0.5時間、「レポートを書く」→ 3時間、「プロジェクト企画書作成」→ 8時間
-  * 難易度ではなく、純粋にそのタスクを完了するのに必要な時間を見積もってください
-
-以下のJSON形式で回答してください:
-{{"estimate_hours": 数値}}"""
-
-        estimate_response = client.chat.completions.create(
-            model="gpt-5-nano",
-            messages=[
-                {"role": "system", "content": "あなたはタスク管理の専門家です。各タスクに常識的にどれくらい時間がかかるかを、現実的に見積もってください。難易度ではなく、純粋な所要時間を答えてください。"},
-                {"role": "user", "content": estimate_prompt}
-            ],
-            response_format={"type": "json_object"}
-        )
-        
-        estimate_result = estimate_response.choices[0].message.content
-        estimate_data = json.loads(estimate_result)
-        
-        # AIの見積もり時間（純粋な見積もり、ESTIMATE表示用）
-        ai_estimate_hours = max(0.5, min(24, estimate_data.get("estimate_hours", 1)))
-        estimate_minutes = int(ai_estimate_hours * 60)  # ESTIMATEに表示される時間（分）
-        
-        # 締め切り時間（見積もり+6時間、DEADLINE用）
-        deadline_hours_from_now = ai_estimate_hours + 6  # 現在時刻から何時間後か
-        weight = 3  # weightは固定値に
-        
-        now = datetime.now(timezone.utc)
-        deadline = now + timedelta(hours=deadline_hours_from_now)  # DEADLINE = 今 + 見積もり + 6時間
-        
         # ランク別のキャラクター設定を取得
         persona = AI_PERSONAS.get(rank, AI_PERSONAS[1])
         
-        # AIコメントを生成（ランク別の性格を反映、タスク内容に言及）
-        comment_prompt = f"""以下のタスクについて、AIアシスタントとして短いコメントを作成してください。
+        # 1回のAPI呼び出しで妥当性確認、見積もり、コメント生成を行う
+        prompt = f"""以下のテキストをタスクとして解析し、JSON形式で回答してください。
 
-タスク: {text}
-見積もり工数: {ai_estimate_hours}時間
-重要度: {weight}/5
+入力: {text}
 
 キャラクター設定:
 {persona['prompt']}
 
-重要:
-- 必ずタスクの内容に具体的に言及してください
-- タスクに対する見解や、作業のポイント、注意点などを含めてください
-- 上記のキャラクター設定に基づいた口調で話してください
-- 30〜50文字程度の日本語
+要件:
+1. valid: タスクとして成立するか判定（true/false）
+   - 拒否: 同じ文字の繰り返し、記号のみ、ランダム文字列、意味不明な文字列
+   - 許可: 作業の意図が読み取れればOK
+2. reason: validがfalseの場合の理由（日本語）
+3. estimate_hours: タスク完了にかかる現実的な時間（0.5〜24時間）。難易度ではなく純粋な所要時間。
+4. comment: キャラクター設定に基づいた、タスクに対する短いコメント（40文字以内）。validがfalseの場合は叱責や冷たいコメント。
 
-ランク別コメント例:
-Rank 1 (Protocol): 「レポート作成」→ "...レポート作成。データ収集と分析が必要だ。実行せよ。"
-Rank 2 (Executor): 「買い物」→ "買い物リストを確認し、必要な物品を漏れなく購入しなさい。"
-Rank 3 (Analyst): 「メール返信」→ "メール返信は優先度を判断し、論理的に整理して対応してください。"
-Rank 4 (Monitor): 「システム設計」→ "システム設計は要件を精査し、段階的に進めることを推奨します。"
-Rank 5 (Advisor): 「会議準備」→ "会議準備は資料の論点を明確にし、参加者への配慮も忘れずに。"
-Rank 6 (Guardian): 「資料作成」→ "資料作成は丁寧に進めましょう。必要であれば休憩も取ってください。"
-Rank 7 (Partner): 「企画書」→ "企画書作成ですね。あなたのアイデアを存分に活かしてください。"
+回答フォーマット(JSON):
+{{
+  "valid": boolean,
+  "reason": "string",
+  "estimate_hours": number,
+  "comment": "string"
+}}
+"""
 
-タスクの具体的な作業内容や進め方に触れながら、キャラクターに合った口調でコメントを生成してください。"""
-
-        comment_response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
             messages=[
-                {"role": "system", "content": f"{persona['prompt']} タスクの具体的な内容と作業のポイントに言及した、やや詳しめのコメントを提供してください。"},
-                {"role": "user", "content": comment_prompt}
+                {"role": "system", "content": "あなたはタスク管理のAIアシスタントです。入力されたタスクを解析し、JSON形式で結果を返してください。"},
+                {"role": "user", "content": prompt}
             ],
+            response_format={"type": "json_object"}
         )
         
-        ai_comment = comment_response.choices[0].message.content.strip().strip('"').strip("'")
+        import json
+        result = json.loads(response.choices[0].message.content)
         
-        print(f"[AI Estimate] task='{text}', estimate={ai_estimate_hours}h ({estimate_minutes}min), deadline={deadline_hours_from_now}h from now, weight={weight}, comment='{ai_comment}'")
+        if not result.get("valid", False):
+            raise HTTPException(400, result.get("comment", "...何を言っているんですか？"))
         
-        return TaskProposal(title=text.strip(), estimate_minutes=estimate_minutes, deadline_at=deadline, weight=weight, ai_comment=ai_comment)
-    
+        # AIの見積もり時間
+        ai_estimate_hours = max(0.5, min(24, result.get("estimate_hours", 1)))
+        estimate_minutes = int(ai_estimate_hours * 60)
+        
+        # 締め切り時間（見積もり+6時間）
+        deadline_hours_from_now = ai_estimate_hours + 6
+        weight = 3
+        
+        now = datetime.now(timezone.utc)
+        deadline = now + timedelta(hours=deadline_hours_from_now)
+        
+        return TaskProposal(
+            title=text.strip(), 
+            estimate_minutes=estimate_minutes, 
+            deadline_at=deadline, 
+            weight=weight,
+            ai_comment=result.get("comment", "...")
+        )
+        
     except HTTPException:
-        # HTTPExceptionはそのまま再送出
         raise
     except Exception as e:
-        print(f"[ERROR] AI estimation error: {e}")
-        # エラー時は従来のロジックにフォールバック（最低6時間）
-        weight = classify_weight(text)
-        estimate = max(360, weight * 100)  # 最低6時間
+        print(f"AI Error: {e}")
+        # Fallback
+        weight = 3
+        estimate = 60
         now = datetime.now(timezone.utc)
-        deadline = now + timedelta(minutes=estimate)
-        return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight, ai_comment="このタスクを分析した。実行せよ。")
+        deadline = now + timedelta(minutes=360)
+        return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight, ai_comment="...")
+
 
 
 # ---- Points and rank system ----
