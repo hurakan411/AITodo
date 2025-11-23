@@ -657,10 +657,11 @@ async def withdraw(req: WithdrawRequest, x_user_id: str = Header(default="local"
     return task
 
 
-def _check_overdue(repo: Repo):
+def _check_overdue(repo: Repo) -> List[Task]:
     # mark overdue as failed if necessary
     active_tasks = repo.get_active_tasks()
     now = datetime.now(timezone.utc)
+    updated = False
     for task in active_tasks:
         if now > task.deadline_at:
             task.status = TaskStatus.FAILED
@@ -668,33 +669,40 @@ def _check_overdue(repo: Repo):
             repo.update_task(task)
             profile = apply_points_on_failure(repo.get_profile(), task)
             repo.set_profile(profile)
+            updated = True
+            
+    if updated:
+        return repo.get_active_tasks()
+    return active_tasks
 
 @app.get('/tasks/current', response_model=List[Task])
 async def current_task(x_user_id: str = Header(default="local")):
     repo = get_repo(x_user_id)
-    _check_overdue(repo)
-    return repo.get_active_tasks()
+    return _check_overdue(repo)
 
 
 @app.get('/status', response_model=StatusResponse)
 async def status(x_user_id: str = Header(default="local")):
     repo = get_repo(x_user_id)
     # also trigger overdue check here
-    _check_overdue(repo)
+    active_tasks = _check_overdue(repo)
+    
+    prof = repo.get_profile()
+    
     next_th = 10
     for r in sorted(RANK_THRESHOLDS):
         th = RANK_THRESHOLDS[r]
-        if repo.get_profile().points < th:
+        if prof.points < th:
             next_th = th
             break
-    prof = repo.get_profile()
+            
     ai_line = ""  # Frontend handles AI comments with _rankLine
     # game over condition: rank 1 and at least one failed task in history
     failed_exists = repo.any_failed()
     game_over = int(prof.rank) == 1 and failed_exists
     return StatusResponse(
         profile=prof,
-        active_tasks=repo.get_active_tasks(),
+        active_tasks=active_tasks,
         recent_tasks=repo.recent(),
         next_threshold=next_th,
         ai_line=ai_line,
