@@ -2,16 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/api_client.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/user_id_service.dart';
 
 class GameOverScreen extends ConsumerWidget {
   const GameOverScreen({super.key});
 
   Future<void> _ack(BuildContext context, WidgetRef ref) async {
     try {
-      final api = ref.read(apiClientProvider);
-      await api.gameoverAck();
+      // 1. Reset Supabase data directly
+      final userId = await UserIdService.getUserId();
+      final supabase = Supabase.instance.client;
+      
+      // Delete all tasks
+      await supabase.from('tasks').delete().eq('user_id', userId);
+      
+      // Reset profile points to 10
+      await supabase.from('profiles').update({'points': 10}).eq('user_id', userId);
+      
+      // 2. Notify backend (best effort)
+      try {
+        final api = ref.read(apiClientProvider);
+        await api.gameoverAck();
+      } catch (e) {
+        print('Backend ack failed: $e');
+      }
+
       if (context.mounted) context.go('/contract');
-    } catch (_) {}
+    } catch (e) {
+      print('Reset failed: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('リセットに失敗しました: $e')),
+        );
+      }
+    }
   }
 
   @override

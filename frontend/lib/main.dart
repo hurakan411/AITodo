@@ -6,6 +6,7 @@ import 'src/screens/contract_screen.dart';
 import 'src/screens/home_screen.dart';
 import 'src/screens/profile_screen.dart';
 import 'src/screens/game_over_screen.dart';
+import 'src/screens/tutorial_screen.dart';
 import 'src/services/storage_service.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -58,6 +59,7 @@ class ObeyApp extends ConsumerWidget {
         GoRoute(path: '/home', builder: (c, s) => const HomeScreen()),
         GoRoute(path: '/profile', builder: (c, s) => const ProfileScreen()),
         GoRoute(path: '/gameover', builder: (c, s) => const GameOverScreen()),
+        GoRoute(path: '/tutorial', builder: (c, s) => const TutorialScreen()),
       ],
     );
 

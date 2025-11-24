@@ -11,6 +11,7 @@ import '../services/user_id_service.dart';
 import 'task_creation_modal.dart';
 import 'task_proposal_modal.dart';
 import 'new_task_button.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -172,6 +173,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
       
       _lastPoints = points;
+
+      // Check tutorial
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('has_seen_tutorial') != true) {
+        if (mounted) context.push('/tutorial');
+      }
 
     } catch (e) {
       print('[Home] Direct Supabase access failed or fallback needed: $e');
@@ -723,6 +730,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Obeyne'),
+        leading: IconButton(
+          onPressed: () => context.push('/tutorial'),
+          icon: const Icon(Icons.help_outline),
+          tooltip: '使い方',
+        ),
         actions: [
           IconButton(
             onPressed: () => context.go('/profile'),
