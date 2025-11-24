@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lottie/lottie.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/api_client.dart';
+import '../services/user_id_service.dart';
 import '../models/task.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -16,6 +18,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   int _points = 10;
   int _rank = 2;
   int _nextThreshold = 0;
+  int _currentThreshold = 0;
   List<Task> _recent = [];
   String _aiLine = '';
   String? _error;
@@ -31,29 +34,112 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _load() async {
     try {
-      final api = ref.read(apiClientProvider);
-      final s = await api.status();
+      final userId = await UserIdService.getUserId();
+      final supabase = Supabase.instance.client;
+      
+      // 1. Fetch Profile
+      final profileRes = await supabase
+          .from('profiles')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+          
+      if (profileRes == null) {
+        throw Exception('Profile not found');
+      }
+      
+      final points = profileRes['points'] as int;
+      
+      // Calculate Rank
+      int calcRank(int p) {
+        if (p >= 120) return 7;
+        if (p >= 80) return 6;
+        if (p >= 60) return 5;
+        if (p >= 40) return 4;
+        if (p >= 20) return 3;
+        if (p >= 10) return 2;
+        return 1;
+      }
+      final rank = calcRank(points);
+      
+      // Calculate Next Threshold
+      int nextThreshold = 0;
+      int currentThreshold = 0;
+      final thresholds = {
+        1: 0, 2: 10, 3: 20, 4: 40, 5: 60, 6: 80, 7: 120
+      };
+      
+      currentThreshold = thresholds[rank] ?? 0;
+
+      for (int r = 1; r <= 7; r++) {
+        if (thresholds[r] != null && points < thresholds[r]!) {
+          nextThreshold = thresholds[r]!;
+          break;
+        }
+      }
+      // If max rank or close to it
+      if (nextThreshold == 0 && points < 120) nextThreshold = 120;
+      if (nextThreshold == 0) nextThreshold = points + 20; // Fallback for max rank
+
+      // 2. Fetch Recent Tasks
+      final tasksRes = await supabase
+          .from('tasks')
+          .select()
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .limit(10);
+          
+      final recentTasks = (tasksRes as List).map((json) => Task.fromJson(json)).toList();
+
       if (!mounted) return;
       setState(() {
-        _points = s.profile.points;
-        _rank = s.profile.rank;
-        _userId = s.profile.userId;
-        _nextThreshold = s.nextThreshold;
-        _recent = s.recentTasks;
-        final fetched = (s.aiLine).trim();
-        _aiLine = fetched.isEmpty ? _rankLine(_rank) : fetched;
+        _points = points;
+        _rank = rank;
+        _userId = userId;
+        _nextThreshold = nextThreshold;
+        _currentThreshold = currentThreshold;
+        _recent = recentTasks;
+        _aiLine = _rankLine(rank);
         _initializing = false;
       });
 
       if (_points <= 0 && mounted) {
         context.go('/gameover');
       }
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _error = '取得に失敗しました';
-        _initializing = false;
-      });
+    } catch (e) {
+      print('[Profile] Direct Supabase access failed: $e');
+      // Fallback to Backend API
+      try {
+        final api = ref.read(apiClientProvider);
+        final s = await api.status();
+        if (!mounted) return;
+        
+        final thresholds = {
+          1: 0, 2: 10, 3: 20, 4: 40, 5: 60, 6: 80, 7: 120
+        };
+        final currentThreshold = thresholds[s.profile.rank] ?? 0;
+
+        setState(() {
+          _points = s.profile.points;
+          _rank = s.profile.rank;
+          _userId = s.profile.userId;
+          _nextThreshold = s.nextThreshold;
+          _currentThreshold = currentThreshold;
+          _recent = s.recentTasks;
+          final fetched = (s.aiLine).trim();
+          _aiLine = fetched.isEmpty ? _rankLine(_rank) : fetched;
+          _initializing = false;
+        });
+        if (_points <= 0 && mounted) {
+          context.go('/gameover');
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _error = '取得に失敗しました';
+          _initializing = false;
+        });
+      }
     }
   }
 
@@ -278,7 +364,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  '$_points',
+                                  '$_currentThreshold',
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     color: const Color(0xFF4A4E6D),
                                     fontWeight: FontWeight.w600,
@@ -317,8 +403,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: LinearProgressIndicator(
-                                  value: _nextThreshold > 0
-                                      ? (_points / _nextThreshold).clamp(0.0, 1.0)
+                                  value: (_nextThreshold - _currentThreshold) > 0
+                                      ? ((_points - _currentThreshold) / (_nextThreshold - _currentThreshold)).clamp(0.0, 1.0)
                                       : 0.0,
                                   minHeight: 10,
                                   backgroundColor: Colors.transparent,
@@ -585,7 +671,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 String _rankLine(int rank) {
   switch (rank) {
     case 1:
-      return '...了承。';
+      return '...。';
     case 2:
       return '命令を待機中。';
     case 3:

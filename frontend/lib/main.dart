@@ -8,8 +8,32 @@ import 'src/screens/profile_screen.dart';
 import 'src/screens/game_over_screen.dart';
 import 'src/services/storage_service.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Load .env
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    print('Warning: .env file not found: $e');
+  }
+  
+  // Initialize Supabase
+  final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+  final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+  
+  if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty && supabaseUrl != 'your_supabase_url_here') {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+    );
+  } else {
+    print('Warning: Supabase URL or Anon Key not provided or invalid. Supabase features will not work.');
+  }
+
   final storage = await StorageService.init();
   final consent = storage.getConsentAccepted();
   runApp(ProviderScope(overrides: [

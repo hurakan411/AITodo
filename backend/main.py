@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_KEY: Optional[str] = None
 
     class Config:
-        env_file = ".env"
+        env_file = os.path.join(os.path.dirname(__file__), ".env")
 
 
 settings = Settings()
@@ -414,17 +414,29 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         
         # 締め切り時間（見積もり+6時間）
         deadline_hours_from_now = ai_estimate_hours + 6
+        
+        # JST 20時以降ならさらに+6時間（睡眠時間考慮）
+        now_utc = datetime.now(timezone.utc)
+        jst_offset = timedelta(hours=9)
+        now_jst = now_utc + jst_offset
+        if now_jst.hour >= 20:
+            deadline_hours_from_now += 6
+            
         weight = 3
         
         now = datetime.now(timezone.utc)
         deadline = now + timedelta(hours=deadline_hours_from_now)
         
+        ai_comment = result.get("comment", "...")
+        if rank == 1:
+            ai_comment = "...。"
+
         return TaskProposal(
             title=text.strip(), 
             estimate_minutes=estimate_minutes, 
             deadline_at=deadline, 
             weight=weight,
-            ai_comment=result.get("comment", "...")
+            ai_comment=ai_comment
         )
         
     except HTTPException:
@@ -491,7 +503,7 @@ async def accept(req: TaskProposal, x_user_id: str = Header(default="local")):
         raise HTTPException(400, 'タスクは同時に3つまでしか持てません')
     
     # check game over
-    if repo.any_failed() and repo.get_profile().rank == 1:
+    if repo.get_profile().points <= 0:
         raise HTTPException(400, 'ゲームオーバー状態です。これ以上タスクを受けられません。')
 
     now = datetime.now(timezone.utc)
@@ -554,7 +566,9 @@ async def complete(req: CompleteRequest, x_user_id: str = Header(default="local"
     task.self_report = req.self_report
     
     # AI Comment Generation
-    if settings.OPENAI_API_KEY:
+    if profile.rank == 1:
+        task.ai_completion_comment = "...。"
+    elif settings.OPENAI_API_KEY:
         try:
             client = OpenAI(api_key=settings.OPENAI_API_KEY)
             persona = AI_PERSONAS.get(profile.rank, AI_PERSONAS[2])
@@ -634,10 +648,26 @@ async def current_task(x_user_id: str = Header(default="local")):
 @app.get('/status', response_model=StatusResponse)
 async def status(x_user_id: str = Header(default="local")):
     repo = get_repo(x_user_id)
-    # also trigger overdue check here
-    active_tasks = _check_overdue(repo)
     
-    prof = repo.get_profile()
+    # Run DB queries in parallel
+    import concurrent.futures
+    
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        # _check_overdue might update DB, so it should be careful. 
+        # But here we just want to fetch data.
+        # Actually _check_overdue updates tasks, so it might conflict if we fetch profile in parallel?
+        # Supabase handles concurrency, but let's be safe.
+        # Let's run _check_overdue first (it fetches active tasks), then fetch profile and recent in parallel.
+        
+        # 1. Check overdue and get active tasks
+        active_tasks = _check_overdue(repo)
+        
+        # 2. Fetch profile and recent tasks in parallel
+        future_profile = executor.submit(repo.get_profile)
+        future_recent = executor.submit(repo.recent)
+        
+        prof = future_profile.result()
+        recent = future_recent.result()
     
     next_th = 10
     for r in sorted(RANK_THRESHOLDS):
@@ -647,13 +677,12 @@ async def status(x_user_id: str = Header(default="local")):
             break
             
     ai_line = ""  # Frontend handles AI comments with _rankLine
-    # game over condition: rank 1 and at least one failed task in history
-    failed_exists = repo.any_failed()
-    game_over = int(prof.rank) == 1 and failed_exists
+    # game over condition: points <= 0
+    game_over = prof.points <= 0
     return StatusResponse(
         profile=prof,
         active_tasks=active_tasks,
-        recent_tasks=repo.recent(),
+        recent_tasks=recent,
         next_threshold=next_th,
         ai_line=ai_line,
         game_over=game_over,

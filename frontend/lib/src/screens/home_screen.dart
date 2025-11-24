@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 import 'package:dio/dio.dart';
 import '../models/task.dart';
 import '../services/api_client.dart';
+import '../services/user_id_service.dart';
 import 'task_creation_modal.dart';
 import 'task_proposal_modal.dart';
+import 'new_task_button.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -24,7 +28,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final Ticker _ticker;
   int? _lastPoints;
   int _lastRank = 2;
-  bool _isButtonPressed = false; // ボタン押下状態
+  String _displayedAiLine = '';
+  Timer? _textTimer;
 
   @override
   void initState() {
@@ -52,40 +57,154 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    _textTimer?.cancel();
     _ticker.dispose();
     super.dispose();
   }
 
-  Future<void> _loadStatus() async {
-    try {
-      final api = ref.read(apiClientProvider);
-      final s = await api.status();
-      if (!mounted) return;
-      if (s.gameOver) {
-        context.go('/gameover');
+  void _startTypewriterAnimation(String text) {
+    _textTimer?.cancel();
+    _displayedAiLine = '';
+    int index = 0;
+    
+    _textTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+      if (!mounted) {
+        timer.cancel();
         return;
       }
-      setState(() {
-        _activeTasks = s.activeTasks;
-        _lastRank = s.profile.rank;
-        // フロントエンドでランダムにセリフを生成
-        _aiLine = _rankLine(s.profile.rank);
-        // ignore: avoid_print
-        print('[Home] ai_line: $_aiLine');
-        _initializing = false;
-      });
-      if (_lastPoints != null && s.profile.points < _lastPoints!) {
-        // ポイント減少＝失敗の可能性が高い（スナックバー表示なし）
+      if (index < text.length) {
+        setState(() {
+          _displayedAiLine += text[index];
+        });
+        index++;
+      } else {
+        timer.cancel();
       }
-      _lastPoints = s.profile.points;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[Home] Error loading status: $e');
+    });
+  }
+
+  Future<void> _loadStatus() async {
+    try {
+      // Try direct Supabase connection first
+      final userId = await UserIdService.getUserId();
+      
+      // Check if Supabase is initialized
+      if (Supabase.instance.client == null) {
+        throw Exception('Supabase not initialized');
+      }
+      final supabase = Supabase.instance.client;
+      
+      // 1. Fetch Profile
+      final profileRes = await supabase
+          .from('profiles')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+          
+      if (profileRes == null) {
+        // Profile doesn't exist, create it directly
+        try {
+          await supabase.from('profiles').insert({
+            'user_id': userId,
+            'points': 10,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+          // Retry loading
+          return _loadStatus();
+        } catch (createError) {
+          print('[Home] Failed to create profile directly: $createError');
+          // If creation fails, we can't proceed.
+          throw Exception('Profile creation failed');
+        }
+      }
+      
+      final points = profileRes['points'] as int;
+      
+      // Calculate Rank (Same logic as backend)
+      int calcRank(int p) {
+        if (p >= 120) return 7;
+        if (p >= 80) return 6;
+        if (p >= 60) return 5;
+        if (p >= 40) return 4;
+        if (p >= 20) return 3;
+        if (p >= 10) return 2;
+        return 1;
+      }
+      final rank = calcRank(points);
+
+      if (points <= 0) {
+        if (mounted) context.go('/gameover');
+        return;
+      }
+
+      // 2. Fetch Active Tasks
+      final tasksRes = await supabase
+          .from('tasks')
+          .select()
+          .eq('user_id', userId)
+          .eq('status', 'ACTIVE');
+          
+      final activeTasks = (tasksRes as List).map((json) => Task.fromJson(json)).toList();
+      
+      // 3. Check for expired tasks
+      final now = DateTime.now().toUtc();
+      final hasExpired = activeTasks.any((t) => t.deadlineAt.isBefore(now));
+      
+      if (hasExpired) {
+        // If expired, call backend to handle failure logic
+        throw Exception('Tasks expired');
+      }
+
       if (!mounted) return;
       setState(() {
-        _error = 'ステータス取得に失敗しました';
+        _activeTasks = activeTasks;
+        _lastRank = rank;
+        
+        final newLine = _rankLine(rank);
+        if (_aiLine != newLine) {
+          _aiLine = newLine;
+          _startTypewriterAnimation(_aiLine);
+        } else if (_displayedAiLine.isEmpty && _aiLine.isNotEmpty) {
+           _startTypewriterAnimation(_aiLine);
+        }
+        
         _initializing = false;
       });
+      
+      _lastPoints = points;
+
+    } catch (e) {
+      print('[Home] Direct Supabase access failed or fallback needed: $e');
+      // Fallback to Backend API
+      try {
+        final api = ref.read(apiClientProvider);
+        final s = await api.status();
+        if (!mounted) return;
+        if (s.gameOver) {
+          context.go('/gameover');
+          return;
+        }
+        setState(() {
+          _activeTasks = s.activeTasks;
+          _lastRank = s.profile.rank;
+          final newLine = _rankLine(s.profile.rank);
+          if (_aiLine != newLine) {
+            _aiLine = newLine;
+            _startTypewriterAnimation(_aiLine);
+          } else if (_displayedAiLine.isEmpty && _aiLine.isNotEmpty) {
+             _startTypewriterAnimation(_aiLine);
+          }
+          _initializing = false;
+        });
+        _lastPoints = s.profile.points;
+      } catch (apiError) {
+        print('[Home] API Error: $apiError');
+        if (!mounted) return;
+        setState(() {
+          _error = 'ステータス取得に失敗しました';
+          _initializing = false;
+        });
+      }
     }
   }
 
@@ -164,13 +283,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _openCreate() async {
-    // ボタンを押したらすぐに元に戻す
-    setState(() => _isButtonPressed = true);
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (mounted) {
-      setState(() => _isButtonPressed = false);
-    }
-    
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -661,7 +773,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                   child: Text(
-                    _aiLine.isEmpty ? _rankLine(_lastRank) : _aiLine,
+                    _initializing ? '' : _displayedAiLine,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: const Color(0xFF4A4E6D),
                       letterSpacing: 0.8,
@@ -683,87 +795,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         )
                       : _activeTasks.isEmpty
                       ? Center(
-                          child: GestureDetector(
+                          child: NewTaskButton(
                             onTap: _openCreate,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 100),
-                              width: 240,
-                              height: 240,
-                              transform: Matrix4.translationValues(
-                                0,
-                                _isButtonPressed ? 4 : 0,
-                                0,
-                              ),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: _isButtonPressed
-                                      ? [
-                                          const Color(0xFFD0D3E0),
-                                          const Color(0xFFE0E2EC),
-                                        ]
-                                      : [
-                                          const Color(0xFFE0E2EC),
-                                          const Color(0xFFF0F2F8),
-                                        ],
-                                ),
-                                boxShadow: _isButtonPressed
-                                    ? [
-                                        // 押下時：小さな影で沈んだ印象
-                                        BoxShadow(
-                                          color: Colors.white.withOpacity(0.3),
-                                          offset: const Offset(-2, -2),
-                                          blurRadius: 8,
-                                          spreadRadius: 0,
-                                        ),
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.15),
-                                          offset: const Offset(2, 2),
-                                          blurRadius: 8,
-                                          spreadRadius: 0,
-                                        ),
-                                      ]
-                                    : [
-                                        // 通常時：大きな影で浮き上がった印象
-                                        BoxShadow(
-                                          color: Colors.white.withOpacity(0.8),
-                                          offset: const Offset(-8, -8),
-                                          blurRadius: 20,
-                                          spreadRadius: 2,
-                                        ),
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.2),
-                                          offset: const Offset(8, 8),
-                                          blurRadius: 20,
-                                          spreadRadius: 2,
-                                        ),
-                                      ],
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.add_circle_outline,
-                                    size: 72,
-                                    color: const Color(0xFF8E92AB),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'NEW\nTASK',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: const Color(0xFF8E92AB),
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 4,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            size: 240,
+                            fontSize: 24,
+                            iconSize: 64,
                           ),
                         )
                       : Center(
@@ -808,85 +844,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             // NEW TASK ボタン（タスクが3つ未満の場合のみ表示）
                             if (_activeTasks.length < 3) ...[
                               SizedBox(height: _activeTasks.length == 2 ? 30 : 14),
-                              GestureDetector(
+                              NewTaskButton(
                                 onTap: _openCreate,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 100),
-                                  width: _activeTasks.length == 2 ? 110 : 160,
-                                  height: _activeTasks.length == 2 ? 110 : 160,
-                                  transform: Matrix4.translationValues(
-                                    0,
-                                    _isButtonPressed ? 4 : 0,
-                                    0,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: _isButtonPressed
-                                          ? [
-                                              const Color(0xFFD0D3E0),
-                                              const Color(0xFFE0E2EC),
-                                            ]
-                                          : [
-                                              const Color(0xFFE0E2EC),
-                                              const Color(0xFFF0F2F8),
-                                            ],
-                                    ),
-                                    boxShadow: _isButtonPressed
-                                        ? [
-                                            BoxShadow(
-                                              color: Colors.white.withOpacity(0.3),
-                                              offset: const Offset(-2, -2),
-                                              blurRadius: 8,
-                                              spreadRadius: 0,
-                                            ),
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.15),
-                                              offset: const Offset(2, 2),
-                                              blurRadius: 8,
-                                              spreadRadius: 0,
-                                            ),
-                                          ]
-                                        : [
-                                            BoxShadow(
-                                              color: Colors.white.withOpacity(0.8),
-                                              offset: const Offset(-6, -6),
-                                              blurRadius: 16,
-                                              spreadRadius: 1,
-                                            ),
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.2),
-                                              offset: const Offset(6, 6),
-                                              blurRadius: 16,
-                                              spreadRadius: 1,
-                                            ),
-                                          ],
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.add_circle_outline,
-                                        size: _activeTasks.length == 2 ? 32 : 48,
-                                        color: const Color(0xFF8E92AB),
-                                      ),
-                                      SizedBox(height: _activeTasks.length == 2 ? 6 : 12),
-                                      Text(
-                                        'NEW\nTASK',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: const Color(0xFF8E92AB),
-                                          fontSize: _activeTasks.length == 2 ? 14 : 16,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 3,
-                                          height: 1.2,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                                size: _activeTasks.length == 2 ? 110 : 160,
+                                fontSize: _activeTasks.length == 2 ? 14 : 16,
+                                iconSize: _activeTasks.length == 2 ? 32 : 48,
                               ),
                             ],
                           ],

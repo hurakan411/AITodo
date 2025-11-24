@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/task.dart';
 import '../models/proposal.dart';
@@ -101,7 +102,7 @@ class StatusPayload {
 
 final apiClientProvider = Provider<ApiClient>((ref) {
   final dio = Dio(BaseOptions(
-    baseUrl: const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://aitodo-n7nc.onrender.com'),
+    baseUrl: dotenv.env['API_BASE_URL'] ?? const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://aitodo-n7nc.onrender.com'),
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 30),
   ));

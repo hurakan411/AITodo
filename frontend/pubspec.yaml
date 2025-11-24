@@ -42,6 +42,8 @@ dependencies:
   intl: ^0.19.0
   google_fonts: ^6.1.0
   uuid: ^4.5.1
+  supabase_flutter: ^2.10.3
+  flutter_dotenv: ^6.0.0
 
 dev_dependencies:
   flutter_test:
@@ -67,6 +69,8 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - .env
+    - assets/images/
     - assets/lottie/
 
   # An image asset can refer to one or more resolution-specific "variants", see
