@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/proposal.dart';
 import '../services/api_client.dart';
 import 'package:dio/dio.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/user_id_service.dart';
+import 'package:uuid/uuid.dart';
 
 class TaskProposalModal extends ConsumerStatefulWidget {
   const TaskProposalModal({super.key, required this.proposal});
@@ -23,21 +26,82 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
       _error = null;
     });
     try {
-      final api = ref.read(apiClientProvider);
-      await api.accept(widget.proposal);
+      print('[TaskProposal] Accepting task: ${widget.proposal.title}');
+      
+      // Write directly to Supabase
+      final userId = await UserIdService.getUserId();
+      final supabase = Supabase.instance.client;
+      
+      // Check active tasks count
+      final activeTasks = await supabase
+          .from('tasks')
+          .select()
+          .eq('user_id', userId)
+          .eq('status', 'active');
+      
+      if (activeTasks.length >= 3) {
+        throw Exception('タスクは同時に3つまでしか持てません');
+      }
+      
+      // Check game over
+      final profileRes = await supabase
+          .from('profiles')
+          .select('points')
+          .eq('user_id', userId)
+          .single();
+      
+      if ((profileRes['points'] as int) <= 0) {
+        throw Exception('ゲームオーバー状態です。これ以上タスクを受けられません。');
+      }
+      
+      // Insert task
+      final now = DateTime.now().toUtc();
+      final taskId = const Uuid().v4();
+      
+      await supabase.from('tasks').insert({
+        'id': taskId,
+        'user_id': userId,
+        'title': widget.proposal.title,
+        'status': 'ACTIVE',
+        'estimate_minutes': widget.proposal.estimateMinutes,
+        'weight': 1,
+        'created_at': now.toIso8601String(),
+        'deadline_at': widget.proposal.deadlineAt.toIso8601String(),
+        'extension_used': false,
+        'ai_completion_comment': widget.proposal.aiComment,
+      });
+      
+      print('[TaskProposal] Task saved to Supabase successfully');
+      
+      // Also notify backend (best effort)
+      try {
+        final api = ref.read(apiClientProvider);
+        await api.accept(widget.proposal);
+        print('[TaskProposal] Backend notified successfully');
+      } catch (e) {
+        print('[TaskProposal] Backend notification failed (non-critical): $e');
+      }
+      
       if (!mounted) return;
       
       // Close this proposal modal
       Navigator.of(context).pop();
       
       // 受諾完了（SnackBarは廃止）
+    } on PostgrestException catch (e) {
+      print('[TaskProposal] PostgrestException: ${e.message} code: ${e.code} details: ${e.details}');
+      if (mounted) {
+        setState(() => _error = 'DBエラー: ${e.message}');
+      }
     } on DioException catch (e) {
+      print('[TaskProposal] DioException: ${e.response?.statusCode} - ${e.response?.data}');
       if (mounted) {
         setState(() => _error = e.response?.data?.toString() ?? 'エラー');
       }
     } catch (e) {
+      print('[TaskProposal] Exception: $e');
       if (mounted) {
-        setState(() => _error = '受諾に失敗しました');
+        setState(() => _error = '受諾に失敗しました: $e');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
