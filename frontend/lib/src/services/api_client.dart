@@ -104,7 +104,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   final dio = Dio(BaseOptions(
     baseUrl: dotenv.env['API_BASE_URL'] ?? const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://aitodo-n7nc.onrender.com'),
     connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 60),
   ));
   
   // Add interceptor to include user ID in all requests

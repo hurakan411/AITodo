@@ -149,11 +149,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       
       // 3. Check for expired tasks
       final now = DateTime.now().toUtc();
-      final hasExpired = activeTasks.any((t) => t.deadlineAt.isBefore(now));
+      final expiredTasks = activeTasks.where((t) => t.deadlineAt.isBefore(now)).toList();
       
-      if (hasExpired) {
-        // If expired, call backend to handle failure logic
-        throw Exception('Tasks expired');
+      if (expiredTasks.isNotEmpty) {
+        print('[Home] Found ${expiredTasks.length} expired tasks. Processing locally...');
+        
+        for (final task in expiredTasks) {
+          // Update task status to FAILED
+          await supabase.from('tasks').update({
+            'status': 'FAILED',
+          }).eq('id', task.id);
+          
+          // Decrease points (penalty)
+          final penalty = task.weight * 5;
+          
+          // Fetch current points again to be safe
+          final pRes = await supabase.from('profiles').select('points').eq('user_id', userId).single();
+          final currentP = pRes['points'] as int;
+          final newP = currentP - penalty;
+          
+          await supabase.from('profiles').update({
+            'points': newP
+          }).eq('user_id', userId);
+          
+          if (newP <= 0) {
+            if (mounted) context.go('/gameover');
+            return;
+          }
+        }
+        
+        // Reload to reflect changes
+        return _loadStatus();
       }
 
       if (!mounted) return;
