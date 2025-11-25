@@ -489,14 +489,14 @@ def apply_points_on_failure(profile: Profile, task: Task) -> Profile:
 
 # ---- API ----
 @app.post('/tasks/propose', response_model=TaskProposal)
-async def propose(req: ProposeRequest, x_user_id: str = Header(default="local")):
+async def propose(req: ProposeRequest, x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     profile = repo.get_profile()
     return propose_estimate_and_deadline(req.text, profile.rank)
 
 
 @app.post('/tasks/accept', response_model=Task)
-async def accept(req: TaskProposal, x_user_id: str = Header(default="local")):
+async def accept(req: TaskProposal, x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     active_tasks = repo.get_active_tasks()
     if len(active_tasks) >= 3:
@@ -530,7 +530,7 @@ async def accept(req: TaskProposal, x_user_id: str = Header(default="local")):
 
 
 @app.post('/tasks/extend', response_model=Task)
-async def extend(req: ExtendRequest, x_user_id: str = Header(default="local")):
+async def extend(req: ExtendRequest, x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     active_tasks = repo.get_active_tasks()
     task = next((t for t in active_tasks if t.id == req.task_id), None)
@@ -547,7 +547,7 @@ async def extend(req: ExtendRequest, x_user_id: str = Header(default="local")):
 
 
 @app.post('/tasks/complete', response_model=Task)
-async def complete(req: CompleteRequest, x_user_id: str = Header(default="local")):
+async def complete(req: CompleteRequest, x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     # Find the specific task by ID
     active_tasks = repo.get_active_tasks()
@@ -606,7 +606,7 @@ async def complete(req: CompleteRequest, x_user_id: str = Header(default="local"
 
 
 @app.post('/tasks/withdraw', response_model=Task)
-async def withdraw(req: WithdrawRequest, x_user_id: str = Header(default="local")):
+async def withdraw(req: WithdrawRequest, x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     active_tasks = repo.get_active_tasks()
     task = next((t for t in active_tasks if t.id == req.task_id), None)
@@ -640,13 +640,13 @@ def _check_overdue(repo: Repo) -> List[Task]:
     return active_tasks
 
 @app.get('/tasks/current', response_model=List[Task])
-async def current_task(x_user_id: str = Header(default="local")):
+async def current_task(x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     return _check_overdue(repo)
 
 
 @app.get('/status', response_model=StatusResponse)
-async def status(x_user_id: str = Header(default="local")):
+async def status(x_user_id: str = Header(default="local", alias="X-User-ID")):
     repo = get_repo(x_user_id)
     
     # Run DB queries in parallel
@@ -695,7 +695,7 @@ async def health():
 
 
 @app.post('/gameover/ack')
-async def gameover_ack(x_user_id: str = Header(default="local")):
+async def gameover_ack(x_user_id: str = Header(default="local", alias="X-User-ID")):
     # purge all data and reset profile
     repo = get_repo(x_user_id)
     repo.clear_all()
