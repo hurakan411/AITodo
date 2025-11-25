@@ -285,17 +285,21 @@ def get_supabase_client():
             try:
                 _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
             except Exception as e:
-                print(f"Error creating Supabase client: {e}")
+                print(f"Error creating Supabase client: {e}", flush=True)
     return _supabase_client
 
 def get_repo(user_id: str = "local") -> Repo:
+    print(f"[get_repo] user_id: {user_id}", flush=True)
     if user_id == "local":
+        print("[get_repo] Using MemoryRepo (LOCAL MODE)", flush=True)
         return MemoryRepo()
         
     client = get_supabase_client()
     if client:
+        print(f"[get_repo] Using SupabaseRepo for user: {user_id}", flush=True)
         return SupabaseRepo(client, user_id)
-            
+    
+    print("[get_repo] Supabase client not available, falling back to MemoryRepo", flush=True)
     return MemoryRepo()
 
 
