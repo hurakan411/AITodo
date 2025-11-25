@@ -31,9 +31,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-print(f"[STARTUP] Settings loaded:")
-print(f"[STARTUP] OPENAI_API_KEY: {settings.OPENAI_API_KEY[:20] if settings.OPENAI_API_KEY else 'None'}...")
-print(f"[STARTUP] SUPABASE_URL: {settings.SUPABASE_URL}")
+print(f"[STARTUP] Settings loaded:", flush=True)
+print(f"[STARTUP] OPENAI_API_KEY: {settings.OPENAI_API_KEY[:20] if settings.OPENAI_API_KEY else 'None'}...", flush=True)
+print(f"[STARTUP] SUPABASE_URL: {settings.SUPABASE_URL}", flush=True)
+print(f"[STARTUP] SUPABASE_SERVICE_KEY is set: {bool(settings.SUPABASE_SERVICE_KEY)}", flush=True)
 
 
 # ---- Domain Models ----
@@ -281,6 +282,13 @@ _supabase_client = None
 def get_supabase_client():
     global _supabase_client
     if _supabase_client is None:
+        if not settings.SUPABASE_URL:
+             print("[get_supabase_client] SUPABASE_URL is not set", flush=True)
+        if not settings.SUPABASE_SERVICE_KEY:
+             print("[get_supabase_client] SUPABASE_SERVICE_KEY is not set", flush=True)
+        if create_client is None:
+             print("[get_supabase_client] supabase package not installed or import failed", flush=True)
+
         if settings.SUPABASE_URL and settings.SUPABASE_SERVICE_KEY and create_client is not None:
             try:
                 _supabase_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
