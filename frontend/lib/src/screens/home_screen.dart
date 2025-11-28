@@ -11,6 +11,7 @@ import '../services/user_id_service.dart';
 import 'task_creation_modal.dart';
 import 'task_proposal_modal.dart';
 import 'new_task_button.dart';
+import '../services/live_activity_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -44,10 +45,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_activeTasks.isEmpty) return;
     // Check if any task has expired
     final now = DateTime.now().toUtc();
-    final hasExpired = _activeTasks.any((task) => 
+    final expiredTasks = _activeTasks.where((task) => 
       task.deadlineAt.difference(now).isNegative
-    );
-    if (hasExpired) {
+    ).toList();
+    
+    if (expiredTasks.isNotEmpty) {
       // pull status to reflect failure/points
       _loadStatus();
     } else {
@@ -183,6 +185,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       if (!mounted) return;
+      
+      // Manage Live Activity
+      if (activeTasks.isNotEmpty) {
+        final liveActivityTasks = activeTasks.map((t) => LiveActivityTask(
+          id: t.id,
+          title: t.title,
+          deadline: t.deadlineAt,
+        )).toList();
+        await liveActivityService.updateTasks(liveActivityTasks);
+      } else {
+        await liveActivityService.stopAll();
+      }
+
       setState(() {
         _activeTasks = activeTasks;
         _lastRank = rank;
@@ -217,6 +232,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           context.go('/gameover');
           return;
         }
+
+        // Manage Live Activity
+        if (s.activeTasks.isNotEmpty) {
+          final liveActivityTasks = s.activeTasks.map((t) => LiveActivityTask(
+            id: t.id,
+            title: t.title,
+            deadline: t.deadlineAt,
+          )).toList();
+          await liveActivityService.updateTasks(liveActivityTasks);
+        } else {
+          await liveActivityService.stopAll();
+        }
+
         setState(() {
           _activeTasks = s.activeTasks;
           _lastRank = s.profile.rank;
@@ -466,6 +494,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final api = ref.read(apiClientProvider);
       // 最初のアクティブタスクを完了
       final completedTask = await api.complete(_activeTasks.first.id, controller.text.trim());
+      
+      // Reload status to reflect changes (points, etc)
       await _loadStatus();
       
       if (!mounted) return;
@@ -711,7 +741,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     try {
       final api = ref.read(apiClientProvider);
       // 最初のアクティブタスクを取り下げ
-      await api.withdraw(_activeTasks.first.id);
+      final withdrawnTask = await api.withdraw(_activeTasks.first.id);
+      
       await _loadStatus();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

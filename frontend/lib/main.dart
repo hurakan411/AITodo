@@ -9,6 +9,8 @@ import 'src/screens/game_over_screen.dart';
 import 'src/screens/tutorial_screen.dart';
 import 'src/services/storage_service.dart';
 
+import 'src/services/live_activity_service.dart';
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,6 +36,9 @@ Future<void> main() async {
   } else {
     print('Warning: Supabase URL or Anon Key not provided or invalid. Supabase features will not work.');
   }
+
+  // Initialize Live Activities
+  // No initialization needed for MethodChannel implementation
 
   final storage = await StorageService.init();
   final consent = storage.getConsentAccepted();
