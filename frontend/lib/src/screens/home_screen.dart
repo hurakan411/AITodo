@@ -21,7 +21,8 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with TickerProviderStateMixin {
+  bool _isLiveActivityEnabled = false;
   List<Task> _activeTasks = [];
   String _aiLine = '';
   bool _loading = false;
@@ -187,14 +188,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (!mounted) return;
       
       // Manage Live Activity
-      if (activeTasks.isNotEmpty) {
-        final liveActivityTasks = activeTasks.map((t) => LiveActivityTask(
-          id: t.id,
-          title: t.title,
-          deadline: t.deadlineAt,
-        )).toList();
-        await liveActivityService.updateTasks(liveActivityTasks);
-      } else {
+      // Auto-update disabled by user request. Only stop if empty.
+      if (activeTasks.isEmpty) {
         await liveActivityService.stopAll();
       }
 
@@ -234,14 +229,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }
 
         // Manage Live Activity
-        if (s.activeTasks.isNotEmpty) {
-          final liveActivityTasks = s.activeTasks.map((t) => LiveActivityTask(
-            id: t.id,
-            title: t.title,
-            deadline: t.deadlineAt,
-          )).toList();
-          await liveActivityService.updateTasks(liveActivityTasks);
-        } else {
+        if (s.activeTasks.isEmpty) {
           await liveActivityService.stopAll();
         }
 
@@ -370,6 +358,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Future<void> _syncLiveActivity() async {
+    if (_activeTasks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('アクティブなタスクがありません')),
+      );
+      return;
+    }
+    
+    final liveActivityTasks = _activeTasks.map((t) => LiveActivityTask(
+      id: t.id,
+      title: t.title,
+      deadline: t.deadlineAt,
+    )).toList();
+    
+    await liveActivityService.updateTasks(liveActivityTasks);
+    
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('ロック画面にタスクを表示しました')),
+    );
+  }
+
   Future<void> _complete() async {
     final controller = TextEditingController();
     final theme = Theme.of(context);
@@ -407,6 +417,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 color: const Color(0xFF8E92AB),
               ),
             ),
+            const SizedBox(height: 24),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
@@ -854,6 +865,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 
                 const SizedBox(height: 24),
                 
+                // Live Activity Toggle
+                if (_activeTasks.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'ロック画面に表示',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFF4A4E6D),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        _NeumorphicSwitch(
+                          value: _isLiveActivityEnabled,
+                          onChanged: (val) async {
+                            setState(() => _isLiveActivityEnabled = val);
+                            if (val) {
+                              await _syncLiveActivity();
+                            } else {
+                              await liveActivityService.stopAll();
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                
                 // Task Display
                 Expanded(
                   child: _initializing
@@ -1079,6 +1120,77 @@ class _NeumorphicButtonState extends State<_NeumorphicButton> {
                   letterSpacing: 0.5,
                 ),
                 overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NeumorphicSwitch extends StatelessWidget {
+  const _NeumorphicSwitch({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 56,
+        height: 32,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xFFE8EAF0),
+          boxShadow: [
+            // Inset shadow for track
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              offset: const Offset(2, 2),
+              blurRadius: 4,
+              spreadRadius: 0,
+            ),
+            BoxShadow(
+              color: Colors.white.withOpacity(0.8),
+              offset: const Offset(-2, -2),
+              blurRadius: 4,
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: value ? const Color(0xFF8E92AB) : const Color(0xFFD8DAE5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      offset: const Offset(1, 1),
+                      blurRadius: 3,
+                    ),
+                    BoxShadow(
+                      color: Colors.white,
+                      offset: const Offset(-1, -1),
+                      blurRadius: 3,
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
