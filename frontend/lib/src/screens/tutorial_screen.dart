@@ -16,23 +16,28 @@ class _TutorialScreenState extends State<TutorialScreen> {
   final List<Map<String, String>> _pages = [
     {
       'title': '1. タスク申請',
-      'description': '「NEW TASK」ボタンから\nやるべきことを宣言してください。\n具体的であるほど、AIは正確に理解します。',
-      'icon': 'handshake',
+      'description': '「NEW TASK」ボタンから\nやるべきことを宣言してください。\n具体的であるほど、\nタスク管理AIである私、\n"Obeyne"は正確に理解します。',
+      'icon': 'Home_screenshot.png',
     },
     {
       'title': '2. 期限見積もり',
-      'description': 'タスク管理AI"Obeyne"がタスクを分析し、\n期限を設定します。\n何も考えずに承認しましょう。',
-      'icon': 'add_task',
+      'description': '私がタスクを分析し期限を設定します。\nあなたは何も考えずに承認してください。',
+      'icon': 'Proposal_screenshot.png',
     },
     {
       'title': '3. 完了報告',
-      'description': 'タスクを完了したら、報告してください。ポイントが付与されます。',
-      'icon': 'psychology',
+      'description': 'タスクを完了したら、報告してください。\nポイントと私からのコメントが与えられます。\n\nこれは嬉しいですね。',
+      'icon': 'Complete_screenshot.png',
     },
     {
       'title': '4. ランクアップ',
-      'description': 'ポイントを貯めてランクを上げましょう。\nランクが上がるとObeyneのモードが変化し、\nあなたへの態度が変化していきます。',
-      'icon': 'timer',
+      'description': 'ポイントを貯めてランクを上げましょう。\nランクが上がると私のモードが変わり、\nあなたへの態度が変化していきます。',
+      'icon': 'Profile_screenshot.png',
+    },
+    {
+      'title': 'Tips. ロック画面表示',
+      'description': 'タスク実行中は\nロック画面にも残り時間を表示できます。\n\nスマホを開くたびに\n私の監視を意識してください。',
+      'icon': 'Lock_screenshot.png',
     },
   ];
 
@@ -50,16 +55,7 @@ class _TutorialScreenState extends State<TutorialScreen> {
     }
   }
 
-  IconData _getIcon(String name) {
-    switch (name) {
-      case 'handshake': return Icons.handshake_outlined;
-      case 'add_task': return Icons.add_task_outlined;
-      case 'psychology': return Icons.psychology_outlined;
-      case 'timer': return Icons.timer_outlined;
-      case 'military_tech': return Icons.military_tech_outlined;
-      default: return Icons.info_outline;
-    }
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -95,37 +91,25 @@ class _TutorialScreenState extends State<TutorialScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            width: 200,
-                            height: 200,
+                            height: 400,
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFFE0E2EC),
-                                  Color(0xFFF0F2F8),
-                                ],
-                              ),
+                              borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.white.withOpacity(0.8),
-                                  offset: const Offset(-8, -8),
-                                  blurRadius: 16,
-                                ),
-                                BoxShadow(
                                   color: Colors.black.withOpacity(0.1),
-                                  offset: const Offset(8, 8),
-                                  blurRadius: 16,
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
                                 ),
                               ],
                             ),
-                          child: Icon(
-                            _getIcon(page['icon']!),
-                            size: 80,
-                            color: const Color(0xFF8E92AB),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Image.asset(
+                                'assets/images/${page['icon']!}',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 48),
                         Text(
                           page['title']!,
