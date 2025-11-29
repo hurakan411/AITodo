@@ -380,14 +380,18 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         # ランク別のキャラクター設定を取得
         persona = AI_PERSONAS.get(rank, AI_PERSONAS[1])
         
-        # ランクに応じたコメントの長さ
+        # ランクに応じたコメントの長さとトーン
         max_len = 20
+        tone_instruction = "一言で冷たく"
         if rank >= 7:
             max_len = 80
+            tone_instruction = "親身に、長めの文章で"
         elif rank >= 5:
             max_len = 60
+            tone_instruction = "少し丁寧に"
         elif rank >= 3:
             max_len = 40
+            tone_instruction = "事務的に"
 
         # 1回のAPI呼び出しで妥当性確認、見積もり、コメント生成を行う
         prompt = f"""以下のテキストをタスクとして解析し、JSON形式で回答してください。
@@ -403,7 +407,8 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
    - 許可: 作業の意図が読み取れればOK
 2. reason: validがfalseの場合の理由（日本語）
 3. estimate_hours: タスク完了にかかる現実的な時間（0.5〜24時間）。難易度ではなく純粋な所要時間。
-4. comment: キャラクター設定に基づいた、タスクに対するコメント（{max_len}文字以内）。validがfalseの場合は叱責や冷たいコメント。
+4. comment: キャラクター設定に基づいた、タスクに対するコメント。
+   - 長さ: {max_len}文字以内（{tone_instruction}）。文字数制限は厳守すること。
    - 禁止: 「手伝いましょうか」「代わりましょうか」等のAIがタスクを実行・補助するような発言。あくまで管理者として振る舞うこと。
 
 回答フォーマット(JSON):
