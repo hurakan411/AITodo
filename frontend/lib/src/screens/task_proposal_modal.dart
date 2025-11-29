@@ -276,6 +276,30 @@ class _TaskProposalModalState extends ConsumerState<TaskProposalModal> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
+                                  'BUFFER',
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: const Color(0xFF4A4E6D),
+                                    fontSize: 10,
+                                    letterSpacing: 1.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '+${(p.bufferMinutes / 60).toStringAsFixed(1)}h',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: const Color(0xFF8E92AB),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
                                   'DEADLINE',
                                   style: theme.textTheme.labelLarge?.copyWith(
                                     color: const Color(0xFF4A4E6D),

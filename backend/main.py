@@ -53,6 +53,7 @@ class TaskProposal(BaseModel):
     deadline_at: datetime
     weight: int = 1
     ai_comment: str = ""  # AIコメントを追加
+    buffer_minutes: int = 0  # バッファ時間を追加
 
 
 class Task(BaseModel):
@@ -370,9 +371,10 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         # APIキーがない場合は従来のロジック（最低6時間）
         weight = classify_weight(text)
         estimate = max(360, weight * 100)  # 最低6時間
+        buffer_minutes = 360 # 6時間バッファ
         now = datetime.now(timezone.utc)
-        deadline = now + timedelta(minutes=estimate)
-        return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight)
+        deadline = now + timedelta(minutes=estimate + buffer_minutes)
+        return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight, buffer_minutes=buffer_minutes)
     
     try:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -440,14 +442,17 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         estimate_minutes = int(ai_estimate_hours * 60)
         
         # 締め切り時間（見積もり+6時間）
-        deadline_hours_from_now = ai_estimate_hours + 6
+        buffer_hours = 6
         
         # JST 20時以降ならさらに+6時間（睡眠時間考慮）
         now_utc = datetime.now(timezone.utc)
         jst_offset = timedelta(hours=9)
         now_jst = now_utc + jst_offset
         if now_jst.hour >= 20:
-            deadline_hours_from_now += 6
+            buffer_hours += 6
+            
+        deadline_hours_from_now = ai_estimate_hours + buffer_hours
+        buffer_minutes = int(buffer_hours * 60)
             
         weight = 3
         
@@ -458,13 +463,16 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         if rank == 1:
             ai_comment = "...。"
 
-        return TaskProposal(
+        proposal = TaskProposal(
             title=text.strip(), 
             estimate_minutes=estimate_minutes, 
             deadline_at=deadline, 
             weight=weight,
-            ai_comment=ai_comment
+            ai_comment=ai_comment,
+            buffer_minutes=buffer_minutes
         )
+        print(f"DEBUG: Proposal: {proposal}")
+        return proposal
         
     except HTTPException:
         raise
@@ -473,9 +481,16 @@ def propose_estimate_and_deadline(text: str, rank: int = 1) -> TaskProposal:
         # Fallback
         weight = 3
         estimate = 60
-        now = datetime.now(timezone.utc)
-        deadline = now + timedelta(minutes=360)
-        return TaskProposal(title=text.strip(), estimate_minutes=estimate, deadline_at=deadline, weight=weight, ai_comment="...")
+        buffer_minutes = 360
+        deadline = datetime.now(timezone.utc) + timedelta(minutes=estimate + buffer_minutes)
+        return TaskProposal(
+            title=text.strip(), 
+            estimate_minutes=estimate, 
+            deadline_at=deadline, 
+            weight=weight, 
+            ai_comment="...",
+            buffer_minutes=buffer_minutes
+        )
 
 
 

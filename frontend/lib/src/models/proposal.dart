@@ -4,6 +4,7 @@ class TaskProposal {
   final DateTime deadlineAt;
   final int weight;
   final String aiComment;
+  final int bufferMinutes;
 
   TaskProposal({
     required this.title,
@@ -11,15 +12,20 @@ class TaskProposal {
     required this.deadlineAt,
     required this.weight,
     this.aiComment = '',
+    this.bufferMinutes = 0,
   });
 
-  factory TaskProposal.fromJson(Map<String, dynamic> json) => TaskProposal(
+  factory TaskProposal.fromJson(Map<String, dynamic> json) {
+    print('DEBUG: TaskProposal.fromJson: $json');
+    return TaskProposal(
         title: json['title'] as String,
         estimateMinutes: json['estimate_minutes'] as int,
         deadlineAt: DateTime.parse(json['deadline_at'] as String),
         weight: json['weight'] as int? ?? 1,
         aiComment: json['ai_comment'] as String? ?? '',
+        bufferMinutes: json['buffer_minutes'] as int? ?? 0,
       );
+  }
 
   Map<String, dynamic> toJson() => {
         'title': title,
